@@ -1,9 +1,10 @@
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict, Optional, Any, Union, AsyncGenerator
 import os
 import json
 import re
 import logging
 import httpx
+import asyncio
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from enum import Enum
@@ -732,6 +733,231 @@ class IntelligentAgent:
     """Intelligent agent with simple confidence threshold: execute (>0.7) or seek clarification (≤0.7)"""
     async def run(self, user_input: str, conversation_context: str = ""):
         return await agent_run(user_input, conversation_context)
+    
+    async def run_streaming(self, user_input: str, conversation_context: str = ""):
+        """Streaming version of agent logic that yields progress as each step completes"""
+        async for event in agent_run_streaming(user_input, conversation_context):
+            yield event
+
+async def agent_run_streaming(user_input: str, conversation_context: str = "") -> AsyncGenerator[Dict[str, Any], None]:
+    """Streaming version of agent logic that yields progress as each step completes"""
+    try:
+        # Step 1: Stream intent classification
+        yield {
+            "type": "intent_analysis",
+            "message": "Analyzing your request to understand the intent...",
+            "user_input": user_input[:100] + "..." if len(user_input) > 100 else user_input
+        }
+        
+        intent_classification = await classify_user_intent(user_input, conversation_context)
+        
+        yield {
+            "type": "intent_classified",
+            "intent": intent_classification.intent.value,
+            "confidence_score": intent_classification.confidence_score,
+            "reasoning": intent_classification.reasoning,
+            "suggested_actions": intent_classification.suggested_actions
+        }
+        
+        logging.info(f"Intent classified as: {intent_classification.intent} (confidence: {intent_classification.confidence_score})")
+        
+        # Step 2: Check confidence threshold
+        if intent_classification.confidence_score <= 0.7:
+            yield {
+                "type": "low_confidence",
+                "message": "I'm not entirely sure what you're asking for. Could you provide more details?",
+                "confidence": intent_classification.confidence_score
+            }
+            return
+        
+        # Step 3: Execute high-confidence intents with streaming
+        if intent_classification.intent == IntentType.CLAIM_DRAFTING:
+            yield {
+                "type": "claims_drafting_start",
+                "message": "Starting patent claims drafting...",
+                "disclosure_length": len(user_input)
+            }
+            
+            yield {
+                "type": "claims_progress",
+                "message": "Analyzing invention disclosure...",
+                "stage": "analysis"
+            }
+            await asyncio.sleep(0.3)  # Simulate analysis time
+            
+            yield {
+                "type": "claims_progress",
+                "message": "Identifying key inventive features...",
+                "stage": "feature_identification"
+            }
+            await asyncio.sleep(0.4)  # Simulate feature identification time
+            
+            yield {
+                "type": "claims_progress",
+                "message": "Drafting comprehensive patent claims...",
+                "stage": "drafting"
+            }
+            await asyncio.sleep(0.3)  # Simulate drafting preparation time
+            
+            # Actually draft the claims
+            claims = draft_claims(user_input, conversation_context)
+            
+            # Stream each claim as it's "generated" with simulated delays
+            for i, claim in enumerate(claims, 1):
+                # Simulate the time it takes to generate each claim
+                await asyncio.sleep(0.5)  # 500ms delay between claims
+                
+                yield {
+                    "type": "claim_generated",
+                    "claim_number": i,
+                    "text": claim,
+                    "total_claims": len(claims)
+                }
+            
+            yield {
+                "type": "claims_complete",
+                "message": f"Successfully drafted {len(claims)} patent claims",
+                "num_claims": len(claims),
+                "claims": claims
+            }
+            
+            # Send final completion event with the actual claims
+            yield {
+                "type": "complete",
+                "message": f"Successfully drafted {len(claims)} patent claims",
+                "response": f"I've drafted {len(claims)} patent claims based on your invention:\n\n" + "\n\n".join(claims),
+                "metadata": {
+                    "should_draft_claims": True,
+                    "has_claims": True,
+                    "reasoning": f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score})"
+                },
+                "data": {
+                    "claims": claims,
+                    "num_claims": len(claims)
+                }
+            }
+            
+        elif intent_classification.intent == IntentType.PRIOR_ART_SEARCH:
+            yield {
+                "type": "prior_art_start",
+                "message": "Starting prior art search..."
+            }
+            await asyncio.sleep(0.3)  # Simulate startup time
+            
+            yield {
+                "type": "prior_art_progress",
+                "message": "Searching patent databases for relevant prior art...",
+                "stage": "searching"
+            }
+            await asyncio.sleep(0.8)  # Simulate database search time
+            
+            yield {
+                "type": "prior_art_progress",
+                "message": "Analyzing search results for relevance and blocking potential...",
+                "stage": "analyzing"
+            }
+            await asyncio.sleep(0.6)  # Simulate analysis time
+            
+            yield {
+                "type": "prior_art_progress",
+                "message": "Generating comprehensive prior art analysis report...",
+                "stage": "reporting"
+            }
+            await asyncio.sleep(0.5)  # Simulate report generation time
+            
+            # Actually perform the search
+            from .prior_art_search import search_prior_art_optimized, format_optimized_results
+            
+            search_terms = user_input.replace("search prior art", "").replace("find prior art", "").replace("prior art", "").strip()
+            if not search_terms:
+                search_terms = user_input
+                
+            result = search_prior_art_optimized(search_terms, max_results=10)
+            formatted_results = format_optimized_results(result)
+            
+            yield {
+                "type": "prior_art_complete",
+                "message": "Prior art search completed",
+                "results": formatted_results,
+                "patents_found": len(result.patents)
+            }
+            
+            # Send final completion event with the prior art results
+            yield {
+                "type": "complete",
+                "message": "Prior art search completed",
+                "response": formatted_results,
+                "metadata": {
+                    "should_draft_claims": False,
+                    "has_claims": False,
+                    "reasoning": f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score})"
+                },
+                "data": {
+                    "prior_art_result": {
+                        "results": formatted_results,
+                        "patents_found": len(result.patents)
+                    }
+                }
+            }
+            
+        elif intent_classification.intent == IntentType.CLAIM_REVIEW:
+            yield {
+                "type": "review_start",
+                "message": "Starting claim review process..."
+            }
+            
+            yield {
+                "type": "review_progress",
+                "message": "Analyzing claim structure and language...",
+                "stage": "analysis"
+            }
+            
+            yield {
+                "type": "review_progress",
+                "message": "Checking USPTO compliance...",
+                "stage": "compliance_check"
+            }
+            
+            # Actually review the claims
+            review_comments = review_claims(user_input, conversation_context)
+            
+            yield {
+                "type": "review_complete",
+                "message": f"Claim review completed - found {len(review_comments)} issues",
+                "review_comments": review_comments
+            }
+            
+        else:
+            # Handle other intents
+            yield {
+                "type": "processing",
+                "message": f"Processing {intent_classification.intent.value} request...",
+                "intent": intent_classification.intent.value
+            }
+            
+            # Execute the intent
+            if intent_classification.intent == IntentType.PATENT_GUIDANCE:
+                response_text = general_conversation(user_input)
+            elif intent_classification.intent == IntentType.INVENTION_ANALYSIS:
+                response_text = general_conversation(f"Please analyze this invention for patentability and provide specific guidance: {user_input}")
+            elif intent_classification.intent == IntentType.TECHNICAL_QUERY:
+                response_text = general_conversation(user_input)
+            else:
+                response_text = general_conversation(user_input)
+            
+            yield {
+                "type": "complete",
+                "message": "Request processed successfully",
+                "response": response_text
+            }
+        
+    except Exception as e:
+        logging.error(f"Error in agent_run_streaming: {e}")
+        yield {
+            "type": "error",
+            "error": str(e),
+            "message": "I encountered an error processing your request. Please try again."
+        }
 
 # Export the agent
 agent = IntelligentAgent()

@@ -15,6 +15,11 @@ export const ChatBot: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingResponse, setStreamingResponse] = useState('');
+  const [streamingThoughts, setStreamingThoughts] = useState<string[]>([]);
+  
+  // ADD THIS: useRef to maintain current thoughts reference
+  const currentThoughtsRef = useRef<string[]>([]);
+  
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 3;
@@ -27,6 +32,11 @@ export const ChatBot: React.FC = () => {
   const backupRef = useRef<{ messages: ChatMessage[]; sessionId: string | null } | null>(null);
   const displayName = (user && (user.name || user.nickname)) ? (user.name || user.nickname) : null;
 
+  // ADD THIS: Sync state with ref whenever streamingThoughts changes
+  useEffect(() => {
+    currentThoughtsRef.current = streamingThoughts;
+  }, [streamingThoughts]);
+  
   // close profile menu on outside click or Escape
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -62,12 +72,14 @@ export const ChatBot: React.FC = () => {
       // ignore
     }
     setStreamingResponse('');
+    setStreamingThoughts([]);
+    currentThoughtsRef.current = []; // CLEAR REF TOO
     setIsLoading(false);
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamingResponse]);
+  }, [messages, streamingResponse, streamingThoughts]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +97,8 @@ export const ChatBot: React.FC = () => {
     setInputValue('');
     setIsLoading(true);
     setStreamingResponse('');
+    setStreamingThoughts([]); // Clear previous thoughts
+    currentThoughtsRef.current = []; // CLEAR REF TOO
 
     try {
       // Abort any previous in-flight request
@@ -118,24 +132,119 @@ export const ChatBot: React.FC = () => {
         session_id: sessionId,
       };
 
+      console.log('🚀 STARTING STREAMING API CALL with request:', request);
+      
       // Use streaming API for real-time response
       await apiService.chatStream(
         request,
-        (chunk: string) => {
+        (chunk: string, eventType?: string) => { // ADD eventType parameter
           // ignore updates if aborted
           if (abortControllerRef.current && abortControllerRef.current.signal.aborted) return;
-          setStreamingResponse(chunk); // Replace instead of append for cleaner streaming
-        },
-        (response) => {
-          // Handle complete response
-          const assistantMessage: ChatMessage = {
-            role: 'assistant',
-            content: response.response, // Changed from conversation_response to response
-            timestamp: new Date().toISOString(),
+          
+          console.log('🔍 STREAMING DEBUG: Chunk received:', {
+            chunk: chunk.substring(0, 100) + (chunk.length > 100 ? '...' : ''),
+            chunkLength: chunk.length,
+            eventType, // LOG EVENT TYPE
+            currentThoughtsCount: streamingThoughts.length,
+            currentResponse: streamingResponse ? 'YES' : 'NO'
+          });
+          
+          // 🎯 CLEAN EVENT TYPE-BASED CLASSIFICATION
+          // Instead of guessing based on content/length, we use the eventType directly
+          // This ensures accurate classification of thoughts vs final results
+          const isThoughtEvent = (eventType: string | undefined): boolean => {
+            if (!eventType) return false;
+            
+            // All these event types represent intermediate thoughts/progress
+            const thoughtEventTypes = [
+              'intent_analysis',
+              'intent_classified', 
+              'prior_art_start',
+              'prior_art_progress',
+              'prior_art_complete',
+              'claims_drafting_start',
+              'claims_progress',
+              'claim_generated',  // Add this to show individual claims as thoughts
+              'claims_complete',
+              'review_start',
+              'review_progress',
+              'review_complete',
+              'processing',
+              'low_confidence'
+            ];
+            
+            return thoughtEventTypes.includes(eventType);
           };
           
+          const isThoughtChunk = isThoughtEvent(eventType);
+          const isFinalResult = eventType === 'complete';
+          const isErrorEvent = eventType === 'error';
+          
+          console.log('🔍 EVENT TYPE DETECTION DEBUG:', {
+            eventType,
+            isThoughtChunk,
+            isFinalResult,
+            isErrorEvent,
+            chunk: chunk.substring(0, 100) + (chunk.length > 100 ? '...' : '')
+          });
+          
+          if (isThoughtChunk) {
+            console.log('✅ Adding to thoughts based on event type:', eventType);
+            setStreamingThoughts(prev => {
+              const newThoughts = [...prev, chunk];
+              currentThoughtsRef.current = newThoughts;
+              console.log('📝 Updated thoughts array:', newThoughts.map(t => t.substring(0, 30) + '...'));
+              return newThoughts;
+            });
+            
+            // Clear any previous response when new thoughts come in
+            if (streamingResponse) {
+              setStreamingResponse('');
+            }
+          } else if (isFinalResult) {
+            console.log('🎯 Setting as main response based on event type:', eventType);
+            setStreamingResponse(chunk);
+            // Keep streamingThoughts intact so they're preserved in the final message
+          } else if (isErrorEvent) {
+            console.log('❌ Handling error event:', eventType);
+            // Add error to thoughts but mark it as an error
+            setStreamingThoughts(prev => {
+              const newThoughts = [...prev, `❌ ${chunk}`];
+              currentThoughtsRef.current = newThoughts;
+              return newThoughts;
+            });
+          } else {
+            // For any other unknown event types, add to thoughts with event type prefix
+            console.log('ℹ️ Adding unknown event to thoughts:', eventType);
+            setStreamingThoughts(prev => {
+              const newThoughts = [...prev, `[${eventType}] ${chunk}`];
+              currentThoughtsRef.current = newThoughts;
+              return newThoughts;
+            });
+          }
+        },
+        (response) => {
+          // FIXED: Use ref instead of stale state
+          const capturedThoughts = [...currentThoughtsRef.current];
+          console.log('Creating assistant message with captured thoughts:', capturedThoughts);
+          
+          // Handle complete response - create final message with thoughts
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: response.response,
+            timestamp: new Date().toISOString(),
+            // Use captured thoughts and only add if we have them
+            thoughts: capturedThoughts.length > 0 ? capturedThoughts : undefined,
+          };
+          
+          console.log('Final assistant message:', assistantMessage);
+          console.log('Message thoughts count:', assistantMessage.thoughts?.length || 0);
           addMessage(assistantMessage);
+          
+          // Clear streaming state AFTER creating the message
           setStreamingResponse('');
+          setStreamingThoughts([]);
+          currentThoughtsRef.current = []; // CLEAR REF TOO
           
           // Update session ID if provided
           if (response.session_id) {
@@ -173,6 +282,11 @@ export const ChatBot: React.FC = () => {
             };
             addMessage(errorMessage);
           }
+          
+          // Clean up streaming state on error
+          setStreamingResponse('');
+          setStreamingThoughts([]);
+          currentThoughtsRef.current = []; // CLEAR REF TOO
         },
         abortControllerRef.current.signal
       );
@@ -185,8 +299,13 @@ export const ChatBot: React.FC = () => {
         timestamp: new Date().toISOString(),
       };
       addMessage(errorMessage);
+      
+      // Clean up streaming state on error
+      setStreamingResponse('');
+      setStreamingThoughts([]);
+      currentThoughtsRef.current = []; // CLEAR REF TOO
     } finally {
-      // cleanup controller but keep streamingResponse for a moment
+      // cleanup controller but keep streaming state until completion
       if (abortControllerRef.current) {
         abortControllerRef.current = null;
       }
@@ -257,8 +376,6 @@ export const ChatBot: React.FC = () => {
     if (undoTimerRef.current) { window.clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
     setShowUndoToast(false);
   };
-
-
 
   if (!isAuthenticated) {
     return (
@@ -345,6 +462,27 @@ export const ChatBot: React.FC = () => {
       )}
 
       <div className="messages-container">
+        {/* Global debug panel */}
+        <div style={{
+          position: 'fixed', 
+          top: '10px', 
+          right: '10px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(0,0,0,0.8)', 
+          color: 'white', 
+          borderRadius: '8px',
+          fontSize: '12px',
+          zIndex: 9999,
+          maxWidth: '300px'
+        }}>
+          <strong>🔍 GLOBAL STATE DEBUG:</strong><br/>
+          • isLoading: {isLoading.toString()}<br/>
+          • streamingThoughts.length: {streamingThoughts.length}<br/>
+          • streamingResponse: {streamingResponse ? 'YES (' + streamingResponse.length + ')' : 'NO'}<br/>
+          • Should show loading: {(isLoading && !streamingResponse && streamingThoughts.length === 0).toString()}<br/>
+          • Should show thoughts: {(streamingThoughts.length > 0).toString()}
+        </div>
+        
         {messages.length === 0 && (
           <div className="welcome-message">
             <div className="welcome-content">
@@ -369,35 +507,80 @@ export const ChatBot: React.FC = () => {
           />
         ))}
         
-        {isLoading && streamingResponse && (
+        {/* Show streaming thoughts immediately when they arrive */}
+        {streamingThoughts.length > 0 && (
           <div className="message assistant">
             <div className="message-content streaming-message">
-              <div className="streaming-response">
-                {streamingResponse}
-                <span className="typing-indicator">▋</span>
+              {/* Enhanced debug info */}
+              <div style={{fontSize: '12px', color: '#666', marginBottom: '10px', padding: '8px', backgroundColor: '#f0f0f0', borderRadius: '4px'}}>
+                <strong>🔍 STREAMING THOUGHTS CONTAINER:</strong><br/>
+                • Thoughts Count: {streamingThoughts.length}<br/>
+                • Has Response: {streamingResponse ? 'YES' : 'NO'}<br/>
+                • Response Length: {streamingResponse ? streamingResponse.length : 0}<br/>
+                • Latest Thought: {streamingThoughts.length > 0 ? streamingThoughts[streamingThoughts.length - 1].substring(0, 50) + '...' : 'None'}<br/>
+                • Container: THOUGHTS ACTIVE
               </div>
-              <InsertButton 
-                content={streamingResponse}
-                onInsert={handleInsertToDocument}
-                disabled={!isReady}
-              />
+              
+              {/* Show streaming thoughts during processing */}
+              <div className="streaming-thoughts">
+                <div className="streaming-thoughts-header">
+                  <span className="thoughts-icon">💭</span>
+                  <span>AI is thinking... ({streamingThoughts.length} thoughts)</span>
+                </div>
+                <div className="streaming-thoughts-content">
+                  {streamingThoughts.map((thought, index) => (
+                    <div key={index} className="streaming-thought-item">
+                      <strong>Thought {index + 1}:</strong> {thought}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Show final streaming response BELOW thoughts */}
+              {streamingResponse && (
+                <div className="streaming-response">
+                  <div className="streaming-content">
+                    <strong>Final Response:</strong> {streamingResponse}
+                    <span className="typing-indicator">▋</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Insert button for streaming content */}
+              {(streamingResponse || streamingThoughts.length > 0) && (
+                <InsertButton 
+                  content={streamingResponse || streamingThoughts.join('\n')}
+                  onInsert={handleInsertToDocument}
+                  disabled={!isReady}
+                />
+              )}
             </div>
           </div>
         )}
 
-        {isLoading && !streamingResponse && (
+        {/* Show loading indicator when no streaming content yet */}
+        {isLoading && !streamingResponse && streamingThoughts.length === 0 && (
           <div className="message assistant">
             <div className="message-content loading-message">
+              {/* Debug info for loading container */}
+              <div style={{fontSize: '12px', color: '#666', marginBottom: '10px', padding: '8px', backgroundColor: '#ffe0e0', borderRadius: '4px'}}>
+                <strong>🔍 LOADING CONTAINER:</strong><br/>
+                • isLoading: {isLoading.toString()}<br/>
+                • streamingResponse: {streamingResponse ? 'YES' : 'NO'}<br/>
+                • streamingThoughts.length: {streamingThoughts.length}<br/>
+                • Container: LOADING ACTIVE
+              </div>
               <div className="loading-indicator">
                 <div className="typing-dots">
                   <span></span>
                   <span></span>
                   <span></span>
                 </div>
+                <span className="loading-text">Starting analysis...</span>
               </div>
             </div>
           </div>
-          )}
+        )}
         
         <div ref={messagesEndRef} />
       </div>
@@ -422,6 +605,7 @@ export const ChatBot: React.FC = () => {
           </button>
         </div>
       </form>
+      
       {showUndoToast && (
         <div className="undo-toast" role="status" aria-live="polite">
           <div>Conversation cleared</div>

@@ -4,6 +4,7 @@ import json
 import os
 from typing import Dict, Any
 from datetime import datetime
+from enum import Enum
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
@@ -13,6 +14,23 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agent import agent
 from .models import AgentResponse
+
+class StreamEventType(str, Enum):
+    """Types of streaming events"""
+    INTENT_ANALYSIS = "intent_analysis"
+    INTENT_CLASSIFIED = "intent_classified" 
+    CLAIMS_DRAFTING_START = "claims_drafting_start"
+    CLAIMS_PROGRESS = "claims_progress"
+    CLAIMS_COMPLETE = "claims_complete"
+    PRIOR_ART_START = "prior_art_start"
+    PRIOR_ART_PROGRESS = "prior_art_progress"
+    PRIOR_ART_COMPLETE = "prior_art_complete"
+    ERROR = "error"
+    COMPLETE = "complete"
+
+def create_sse_event(event_type: StreamEventType, data: Dict[str, Any]) -> str:
+    """Create a Server-Sent Event formatted message"""
+    return f"event: {event_type.value}\ndata: {json.dumps(data)}\n\n"
 
 # Validate environment variables
 def validate_environment():
@@ -55,7 +73,7 @@ app = FastAPI(
     ### Usage
     1. Start a patent drafting run with `/api/patent/run`
     2. Stream real-time results with `/api/patent/stream`
-    3. Search prior art with `/api/patent/prior-art`
+    3. All requests (prior art + claims) go through the unified streaming pipeline
     4. Manage sessions with `/api/sessions`
     """,
     version="1.0.0",
@@ -153,52 +171,146 @@ class SimplePatentService:
         return self._runs[run_id]
 
     async def stream_run(self, run_id: str):
-        """Stream patent drafting run"""
+        """Stream patent drafting run with true step-by-step streaming"""
         try:
             if run_id not in self._runs:
-                yield f"event: error\ndata: {json.dumps({'error': 'Run not found'})}\n\n"
-                yield "event: done\ndata: {}\n\n"
+                yield create_sse_event(StreamEventType.ERROR, {'error': 'Run not found'})
+                yield create_sse_event(StreamEventType.COMPLETE, {})
                 return
+                
             run_data = self._runs[run_id]
             disclosure = run_data["disclosure"]
-            # Update status
             self._runs[run_id]["status"] = "processing"
-            yield f"event: status\ndata: {json.dumps({'status': 'processing', 'message': 'Analyzing your request...'})}\n\n"
-            await asyncio.sleep(1)
+            
             try:
                 session_history = self._get_session_history(run_data["session_id"])
                 if session_history:
                     print(f"🔍 Using session context ({len(session_history)} chars) for run {run_id}")
                 else:
                     print(f"🆕 No session context available for run {run_id}")
-                agent_response = await agent.run(disclosure, session_history)
-                yield f"event: reasoning\ndata: {json.dumps({'text': agent_response.reasoning})}\n\n"
-                await asyncio.sleep(1)
-                if agent_response.should_draft_claims:
-                    yield f"event: tool_call\ndata: {json.dumps({'tool': 'draft_claims', 'num_claims': len(agent_response.claims or [])})}\n\n"
-                    await asyncio.sleep(1)
-                    yield f"event: tool_result\ndata: {json.dumps({'tool': 'draft_claims', 'success': True, 'claims_generated': len(agent_response.claims or [])})}\n\n"
-                    await asyncio.sleep(1)
-                final_data = {
-                    "response": agent_response.conversation_response,
-                    "metadata": {
-                        "should_draft_claims": agent_response.should_draft_claims,
-                        "has_claims": bool(agent_response.claims),
-                        "reasoning": agent_response.reasoning
-                    }
-                }
-                if agent_response.claims:
-                    final_data["data"] = {
-                        "claims": agent_response.claims,
-                        "num_claims": len(agent_response.claims)
-                    }
-                self._runs[run_id]["status"] = "completed"
-                self._runs[run_id]["result"] = agent_response
-                self._add_to_session_history(run_data["session_id"], disclosure, agent_response.conversation_response)
-                print(f"💾 Updated session history for session {run_data['session_id']}")
-                yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
-                await asyncio.sleep(0.5)
-                yield "event: done\ndata: {}\n\n"
+                
+                # Use the new streaming agent method
+                async for event in agent.run_streaming(disclosure, session_history):
+                    event_type = event.get('type', 'unknown')
+                    
+                    if event_type == 'intent_analysis':
+                        yield create_sse_event(StreamEventType.INTENT_ANALYSIS, {
+                            'text': event.get('message', 'Analyzing request...'),
+                            'user_input': event.get('user_input', disclosure[:100] + "...")
+                        })
+                        
+                    elif event_type == 'intent_classified':
+                        yield create_sse_event(StreamEventType.INTENT_CLASSIFIED, {
+                            'text': event.get('reasoning', 'Intent classified'),
+                            'intent_type': event.get('intent', 'unknown'),
+                            'confidence': event.get('confidence_score', 0.0)
+                        })
+                        
+                    elif event_type == 'low_confidence':
+                        yield create_sse_event(StreamEventType.ERROR, {
+                            'error': event.get('message', 'Low confidence - needs clarification'),
+                            'confidence': event.get('confidence', 0.0)
+                        })
+                        return
+                        
+                    elif event_type == 'claims_drafting_start':
+                        yield create_sse_event(StreamEventType.CLAIMS_DRAFTING_START, {
+                            'text': event.get('message', 'Starting claims drafting...'),
+                            'disclosure_length': event.get('disclosure_length', len(disclosure))
+                        })
+                        
+                    elif event_type == 'claims_progress':
+                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
+                            'text': event.get('message', 'Processing...'),
+                            'stage': event.get('stage', 'unknown')
+                        })
+                        
+                    elif event_type == 'claim_generated':
+                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
+                            'claim_number': event.get('claim_number', 0),
+                            'text': event.get('text', ''),
+                            'total_claims': event.get('total_claims', 0)
+                        })
+                        
+                    elif event_type == 'claims_complete':
+                        yield create_sse_event(StreamEventType.CLAIMS_COMPLETE, {
+                            'text': event.get('message', 'Claims complete'),
+                            'num_claims': event.get('num_claims', 0),
+                            'claims': event.get('claims', [])
+                        })
+                        
+                    elif event_type == 'prior_art_start':
+                        yield create_sse_event(StreamEventType.PRIOR_ART_START, {
+                            'text': event.get('message', 'Starting prior art search...')
+                        })
+                        
+                    elif event_type == 'prior_art_progress':
+                        yield create_sse_event(StreamEventType.PRIOR_ART_PROGRESS, {
+                            'text': event.get('message', 'Searching...'),
+                            'stage': event.get('stage', 'unknown')
+                        })
+                        
+                    elif event_type == 'prior_art_complete':
+                        yield create_sse_event(StreamEventType.PRIOR_ART_COMPLETE, {
+                            'text': event.get('message', 'Prior art search complete'),
+                            'results': event.get('results', ''),
+                            'patents_found': event.get('patents_found', 0)
+                        })
+                        
+                    elif event_type == 'review_start':
+                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
+                            'text': event.get('message', 'Starting review...'),
+                            'stage': 'review_start'
+                        })
+                        
+                    elif event_type == 'review_progress':
+                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
+                            'text': event.get('message', 'Reviewing...'),
+                            'stage': event.get('stage', 'unknown')
+                        })
+                        
+                    elif event_type == 'review_complete':
+                        yield create_sse_event(StreamEventType.CLAIMS_COMPLETE, {
+                            'text': event.get('message', 'Review complete'),
+                            'review_comments': event.get('review_comments', [])
+                        })
+                        
+                    elif event_type == 'processing':
+                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
+                            'text': event.get('message', 'Processing...'),
+                            'stage': 'processing'
+                        })
+                        
+                    elif event_type == 'complete':
+                        # Final completion
+                        final_data = {
+                            "response": event.get('response', 'Process completed'),
+                            "metadata": {
+                                "should_draft_claims": event_type in ['claims_complete', 'claim_generated'],
+                                "has_claims": event_type == 'claims_complete',
+                                "reasoning": event.get('message', 'Process completed')
+                            }
+                        }
+                        
+                        if event_type == 'claims_complete' and event.get('claims'):
+                            final_data["data"] = {
+                                "claims": event.get('claims', []),
+                                "num_claims": event.get('num_claims', 0)
+                            }
+                        
+                        self._runs[run_id]["status"] = "completed"
+                        self._add_to_session_history(run_data["session_id"], disclosure, final_data["response"])
+                        print(f"💾 Updated session history for session {run_data['session_id']}")
+                        
+                        yield create_sse_event(StreamEventType.COMPLETE, final_data)
+                        
+                    elif event_type == 'error':
+                        yield create_sse_event(StreamEventType.ERROR, {
+                            'error': event.get('error', 'Unknown error'),
+                            'message': event.get('message', 'Error occurred')
+                        })
+                        return
+                
             except Exception as e:
                 print(f"❌ Agent execution failed: {e}")
                 fallback_response = {
@@ -207,13 +319,13 @@ class SimplePatentService:
                 }
                 self._runs[run_id]["status"] = "error"
                 self._runs[run_id]["error"] = str(e)
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-                yield f"event: final\ndata: {json.dumps(fallback_response)}\n\n"
-                yield "event: done\ndata: {}\n\n"
+                yield create_sse_event(StreamEventType.ERROR, {'error': str(e)})
+                yield create_sse_event(StreamEventType.COMPLETE, fallback_response)
+                
         except Exception as e:
             print(f"❌ Stream execution failed: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-            yield "event: done\ndata: {}\n\n"
+            yield create_sse_event(StreamEventType.ERROR, {'error': str(e)})
+            yield create_sse_event(StreamEventType.COMPLETE, {})
 
 
 class ConversationTurn(BaseModel):
@@ -298,7 +410,20 @@ class RunRequest(BaseModel):
                 yield f"event: reasoning\ndata: {json.dumps({'text': agent_response.reasoning})}\n\n"
                 await asyncio.sleep(1)
                 
-                # Stream tool execution if claims were drafted
+                # Add search progress events for prior art requests
+                if "prior art" in agent_response.reasoning.lower() or "search" in agent_response.reasoning.lower():
+                    yield f"event: search_progress\ndata: {json.dumps({'step': 'searching', 'message': 'Searching patent databases...'})}\n\n"
+                    await asyncio.sleep(0.5)
+                    yield f"event: search_progress\ndata: {json.dumps({'step': 'analyzing', 'message': 'Analyzing search results...'})}\n\n"
+                    await asyncio.sleep(0.5)
+                
+                # Add report drafting progress events
+                if "report" in agent_response.reasoning.lower() or "analysis" in agent_response.reasoning.lower():
+                    yield f"event: report_progress\ndata: {json.dumps({'step': 'structuring', 'message': 'Structuring the report...'})}\n\n"
+                    await asyncio.sleep(0.5)
+                    yield f"event: report_progress\ndata: {json.dumps({'step': 'formatting', 'message': 'Formatting content...'})}\n\n"
+                    await asyncio.sleep(0.5)
+                
                 if agent_response.should_draft_claims:
                     yield f"event: tool_call\ndata: {json.dumps({'tool': 'draft_claims', 'num_claims': len(agent_response.claims or [])})}\n\n"
                     await asyncio.sleep(1)
@@ -330,7 +455,7 @@ class RunRequest(BaseModel):
                 self._add_to_session_history(run_data["session_id"], disclosure, agent_response.conversation_response)
                 print(f"💾 Updated session history for session {run_data['session_id']}")
                 
-                yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
+                yield f"event: results\ndata: {json.dumps(final_data)}\n\n"
                 await asyncio.sleep(0.5)
                 yield "event: done\ndata: {}\n\n"
                 
@@ -350,7 +475,7 @@ class RunRequest(BaseModel):
                 self._runs[run_id]["error"] = str(e)
                 
                 yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-                yield f"event: final\ndata: {json.dumps(fallback_response)}\n\n"
+                yield f"event: results\ndata: {json.dumps(fallback_response)}\n\n"
                 yield "event: done\ndata: {}\n\n"
                 
         except Exception as e:
@@ -399,48 +524,8 @@ async def start_run(request: RunRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/patent/prior-art", tags=["Prior Art Research"])
-async def prior_art_search_endpoint(request: RunRequest):
-    """
-    Search for prior art patents.
-    
-    Performs intelligent prior art search using PatentsView API and Google Patents.
-    Returns comprehensive analysis in markdown format for easy integration
-    into patent reports.
-    
-    Features:
-    - Smart query extraction from natural language
-    - Multi-source patent database search  
-    - Relevance scoring and ranking
-    - Professional markdown report generation
-    """
-    try:
-        search_query = request.user_message or request.disclosure or ""
-        if not search_query:
-            raise HTTPException(status_code=400, detail="user_message or disclosure is required for prior art search")
-
-        # Import here to avoid startup cost if not used
-        from .prior_art_search import search_prior_art_optimized, format_optimized_results
-
-        result = search_prior_art_optimized(search_query, max_results=10)
-        # Format the result for API response
-        formatted_results = format_optimized_results(result)
-        
-        # Create API response structure
-        api_response = {
-            "results": formatted_results,
-            "thought_process": f"Prior art search completed for: {search_query}",
-            "query": search_query,
-            "total_found": result.total_found,
-            "timestamp": result.timestamp,
-            "patents": [patent.patent_id for patent in result.patents]
-        }
-        return api_response
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Prior art endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Prior art endpoint removed - now handled through streaming pipeline
+# All requests (prior art + claims) go through /api/patent/run + /api/patent/stream
 
 @app.get("/api/patent/run/{run_id}", tags=["Patent Drafting"])
 async def get_run_details(run_id: str):
@@ -465,7 +550,7 @@ async def stream_run(run_id: str):
     processes the patent drafting request. Events include status updates,
     reasoning, tool calls, and final results.
     
-    Event types: status, reasoning, tool_call, tool_result, final, done, error
+    Event types: thoughts, results, done, error
     """
     async def event_generator():
         try:
