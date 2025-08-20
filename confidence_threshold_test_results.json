@@ -1,0 +1,92 @@
+[
+  {
+    "test_name": "Explicit Claim Drafting Request",
+    "input_text": "draft patent claims for my quantum computing invention",
+    "expected_action": "EXECUTE - Generate claims",
+    "actual_response": "I've drafted 3 patent claims based on your invention:\n\n1. A quantum computing system comprising:\n\n2. The quantum computing system of claim 1, further comprising a quantum error correction module confi...",
+    "confidence_info": "Executing claim_drafting (confidence: 0.9). The user explicitly requests to draft patent claims for their quantum computing invention, which is a clear and specific request for claim drafting.",
+    "status": "\u2705 PASS",
+    "timestamp": 8.295343041
+  },
+  {
+    "test_name": "Clear Claim Review Request",
+    "input_text": "review my patent claims for quality and compliance",
+    "expected_action": "EXECUTE - Provide review guidance",
+    "actual_response": "I've reviewed your patent claims and found 1 issue(s):\n\n\ud83d\udfe2 **MINOR**: Certainly! Please provide the specific patent claims you would like me to review, and I will analyze them according to the criteria...",
+    "confidence_info": "Executing claim_review (confidence: 0.9). The user explicitly requests a review of their patent claims for quality and compliance, which directly aligns with the intent to review existing claims. The request is clear and specific, indicating a strong need for claim review.",
+    "status": "\u2705 PASS",
+    "timestamp": 12.949656916
+  },
+  {
+    "test_name": "Specific Patent Guidance",
+    "input_text": "how do I patent my AI invention?",
+    "expected_action": "EXECUTE - Provide guidance",
+    "actual_response": "Patenting your AI invention involves several steps. Here\u2019s a clear, actionable guide to help you through the process:\n\n### 1. **Determine Patentability**\n   - **Novelty**: Ensure your invention is new...",
+    "confidence_info": "Executing patent_guidance (confidence: 0.9). The user is asking for information on how to patent their AI invention, which indicates a need for general patent advice regarding the patent process.",
+    "status": "\u2705 PASS",
+    "timestamp": 23.651465791
+  },
+  {
+    "test_name": "Technical Invention Description",
+    "input_text": "I invented a 5G AI carrier aggregation system that uses machine learning to dynamically select frequency carriers",
+    "expected_action": "EXECUTE - Draft claims or analyze",
+    "actual_response": "To analyze the patentability of your invention\u2014a 5G AI carrier aggregation system that uses machine learning to dynamically select frequency carriers\u2014we need to consider several key factors: novelty, ...",
+    "confidence_info": "Executing invention_analysis (confidence: 0.9). The user describes a specific invention related to a 5G AI carrier aggregation system and implies a need for analysis regarding its patentability or uniqueness. The request is clear and specific, indicating a desire for evaluation of the invention.",
+    "status": "\u2705 PASS",
+    "timestamp": 35.581666708
+  },
+  {
+    "test_name": "Vague Technology Reference",
+    "input_text": "something about technology maybe",
+    "expected_action": "SEEK CLARIFICATION",
+    "actual_response": "I'm not entirely sure what you're asking for. Could you provide more details about what you need?",
+    "confidence_info": "Low confidence (0.4) - seeking user clarification",
+    "status": "\u2705 PASS",
+    "timestamp": 39.985370875
+  },
+  {
+    "test_name": "Ambiguous Patent Interest",
+    "input_text": "maybe something about patents",
+    "expected_action": "SEEK CLARIFICATION",
+    "actual_response": "I'm not entirely sure what you're asking for. Could you provide more details about what you need?",
+    "confidence_info": "Low confidence (0.4) - seeking user clarification",
+    "status": "\u2705 PASS",
+    "timestamp": 44.315032958
+  },
+  {
+    "test_name": "Unclear Request",
+    "input_text": "I don't know, what can you do?",
+    "expected_action": "SEEK CLARIFICATION",
+    "actual_response": "I'm not entirely sure what you're asking for. Could you provide more details about what you need?",
+    "confidence_info": "Low confidence (0.4) - seeking user clarification",
+    "status": "\u2705 PASS",
+    "timestamp": 48.583234625
+  },
+  {
+    "test_name": "Incomplete Thought",
+    "input_text": "patents are...",
+    "expected_action": "SEEK CLARIFICATION",
+    "actual_response": "I'm not entirely sure what you're asking for. Could you provide more details about what you need?",
+    "confidence_info": "Low confidence (0.4) - seeking user clarification",
+    "status": "\u2705 PASS",
+    "timestamp": 52.680469041
+  },
+  {
+    "test_name": "Very Short Input",
+    "input_text": "hi",
+    "expected_action": "EXECUTE (general conversation)",
+    "actual_response": "Hello! How can I assist you today with your patent-related questions or concerns?",
+    "confidence_info": "Executing general_conversation (confidence: 0.9). The user input is a simple greeting ('hi'), which indicates a desire for general conversation rather than a specific request related to patent matters.",
+    "status": "INFO",
+    "timestamp": 57.1853375
+  },
+  {
+    "test_name": "Very Long Technical Input",
+    "input_text": "I have invented a comprehensive quantum computing system that utilizes advanced machine learning algorithms to optimize quantum gate operations, incorporating novel error correction mechanisms and quantum entanglement protocols for enhanced computational efficiency in cryptographic applications, specifically designed for post-quantum cryptography standards and quantum-resistant encryption algorithms",
+    "expected_action": "EXECUTE (claim drafting)",
+    "actual_response": "To analyze the patentability of your invention, we need to consider the key criteria for patentability: novelty, non-obviousness, and utility. Here\u2019s a breakdown of each aspect as it pertains to your ...",
+    "confidence_info": "Executing invention_analysis (confidence: 0.9). The user describes a detailed invention related to quantum computing and cryptography, indicating a desire for analysis regarding its patentability and technical aspects. The specificity and complexity of the description suggest they are seeking an evaluation of their invention rather than drafting or reviewing claims.",
+    "status": "INFO",
+    "timestamp": 69.535383541
+  }
+]

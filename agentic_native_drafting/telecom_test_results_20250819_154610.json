@@ -1,0 +1,183 @@
+{
+  "timestamp": "2025-08-19T15:38:08.173476",
+  "domain": "Telecommunications",
+  "test_cases": [
+    {
+      "test_case": {
+        "name": "5G Core Network",
+        "query": "5G core network",
+        "domain": "Telecommunications",
+        "complexity": "2 terms",
+        "expected_terms": [
+          "5G",
+          "core",
+          "network"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 5621,
+      "result_preview": "# Prior Art Search Report: 5G Core Network\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  - **Patent ID:** 10237681 - Registration management method for terminal accessing 5G network on non-3GPP access\n  - **Patent ID:** 10433275 - Systems and methods for positioning mobile devices in a fifth generation wireless network\n  - **Patent ID:** 10602304 - Registration management method for terminal accessing 5G network on non-3GPP access (duplicate of 10237681)\n- **Immedi...",
+      "timestamp": "2025-08-19T15:38:55.867588"
+    },
+    {
+      "test_case": {
+        "name": "Network Slicing",
+        "query": "network slicing",
+        "domain": "Telecommunications",
+        "complexity": "2 terms",
+        "expected_terms": [
+          "network",
+          "slicing"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 5917,
+      "result_preview": "# Prior Art Search Report: Network Slicing\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  - **Patent ID:** 10142994 - Communication method and apparatus using network slicing\n  - **Patent ID:** 10356838 - Supporting network slicing in a wireless communication system\n  - **Patent ID:** 10412741 - Communication method and apparatus using network slicing\n- **Immediate Action Required:** Yes\n  - **Reasoning:** The identified patents present significant blocking potentia...",
+      "timestamp": "2025-08-19T15:39:39.984536"
+    },
+    {
+      "test_case": {
+        "name": "Massive MIMO Beamforming",
+        "query": "massive MIMO beamforming",
+        "domain": "Telecommunications",
+        "complexity": "3 terms",
+        "expected_terms": [
+          "massive",
+          "MIMO",
+          "beamforming"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 5554,
+      "result_preview": "# Prior Art Search Report: Massive MIMO Beamforming\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  1. **Patent ID:** 10243628 - *Massive MIMO array emulation*\n  2. **Patent ID:** 10244411 - *Over the air testing for massive MIMO arrays*\n  3. **Patent ID:** 10582400 - *Over the air testing for massive MIMO arrays*\n- **Immediate Action Required:** Yes\n  - **Reasoning:** The identified patents present significant blocking potential for innovations in massive MIMO beamf...",
+      "timestamp": "2025-08-19T15:40:28.369667"
+    },
+    {
+      "test_case": {
+        "name": "Edge Computing 5G",
+        "query": "edge computing 5G",
+        "domain": "Telecommunications",
+        "complexity": "3 terms",
+        "expected_terms": [
+          "edge",
+          "computing",
+          "5G"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 5645,
+      "result_preview": "# Prior Art Search Report: Edge Computing 5G\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  1. **Patent ID:** 10499304 - Fifth generation new radio edge computing mobility management\n  2. **Patent ID:** 10798635 - Mobile edge computing for data network traffic\n  3. **Patent ID:** 10910693 - 5G-enabled integrated roofing accessory and methods of use thereof\n- **Immediate Action Required:** Yes\n  - **Reasoning:** The identified patents pose significant blocking potent...",
+      "timestamp": "2025-08-19T15:41:19.828610"
+    },
+    {
+      "test_case": {
+        "name": "Network Function Virtualization",
+        "query": "network function virtualization",
+        "domain": "Telecommunications",
+        "complexity": "3 terms",
+        "expected_terms": [
+          "network",
+          "function",
+          "virtualization"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 5899,
+      "result_preview": "# Prior Art Search Report: Network Function Virtualization\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  - Patent ID: 10009278 - Time-efficient network function virtualization architecture\n  - Patent ID: 10033595 - System and method for mobile network function virtualization\n  - Patent ID: 10042662 - Network function virtualization (NFV) parameter trust in data communication systems\n- **Immediate Action Required:** Yes\n  - **Reasoning:** The identified patents pres...",
+      "timestamp": "2025-08-19T15:42:05.815228"
+    },
+    {
+      "test_case": {
+        "name": "5G Dynamic Spectrum Sharing QoS",
+        "query": "5G dynamic spectrum sharing QoS",
+        "domain": "Telecommunications",
+        "complexity": "5 terms",
+        "expected_terms": [
+          "5G",
+          "dynamic",
+          "spectrum",
+          "sharing",
+          "QoS"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 6061,
+      "result_preview": "# Prior Art Search Report: 5G Dynamic Spectrum Sharing QoS\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  1. **Patent ID:** 10002036 - System, method and computer program product for sharing information in a distributed framework\n  2. **Patent ID:** 10002098 - Methods and systems for sharing information between processors\n  3. **Patent ID:** 10003569 - Network resource sharing for routing and forwarding information\n- **Immediate Action Required:** Yes\n  - **Reasonin...",
+      "timestamp": "2025-08-19T15:42:57.848092"
+    },
+    {
+      "test_case": {
+        "name": "Software Defined Networking SDN",
+        "query": "software defined networking SDN",
+        "domain": "Telecommunications",
+        "complexity": "4 terms",
+        "expected_terms": [
+          "software",
+          "defined",
+          "networking",
+          "SDN"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 6030,
+      "result_preview": "# Prior Art Search Report: Software Defined Networking (SDN)\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  1. **Patent ID:** 10003519 - Data delivery method based on software defined networking and software defined networking controller using the method\n  2. **Patent ID:** 10003529 - Method and system for memory allocation in a software-defined networking (SDN) system\n  3. **Patent ID:** 10009261 - Method and system of checkpoint and rollback recovery for forwardin...",
+      "timestamp": "2025-08-19T15:43:44.313932"
+    },
+    {
+      "test_case": {
+        "name": "Network Security Authentication",
+        "query": "network security authentication",
+        "domain": "Telecommunications",
+        "complexity": "3 terms",
+        "expected_terms": [
+          "network",
+          "security",
+          "authentication"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 6513,
+      "result_preview": "# Prior Art Search Report: Network Security Authentication\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  1. **Patent ID:** 10003603 - Computer security based on hierarchical cache latency signature authentication\n  2. **Patent ID:** 10009355 - Bootstrapping user authentication on devices\n  3. **Patent ID:** 10009764 - Apparatus and methods for controlled switching of electronic access clients without requiring network access\n- **Immediate Action Required:** Yes\n  -...",
+      "timestamp": "2025-08-19T15:44:31.734856"
+    },
+    {
+      "test_case": {
+        "name": "5G Ultra Reliable Low Latency",
+        "query": "5G ultra reliable low latency communications",
+        "domain": "Telecommunications",
+        "complexity": "6 terms",
+        "expected_terms": [
+          "5G",
+          "ultra",
+          "reliable",
+          "low",
+          "latency",
+          "communications"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 4199,
+      "result_preview": "# Prior Art Search Report: 5G Ultra Reliable Low Latency Communications\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:** \n  - None identified as highly relevant to the search query.\n- **Immediate Action Required:** Yes\n  - **Reasoning:** The search yielded no patents that directly block the technology of 5G ultra reliable low latency communications, indicating a potential opportunity for innovation without immediate infringement concerns.\n- **Business Impact:** The abse...",
+      "timestamp": "2025-08-19T15:45:21.079060"
+    },
+    {
+      "test_case": {
+        "name": "Mobile Edge Computing MEC",
+        "query": "mobile edge computing MEC 5G",
+        "domain": "Telecommunications",
+        "complexity": "5 terms",
+        "expected_terms": [
+          "mobile",
+          "edge",
+          "computing",
+          "MEC",
+          "5G"
+        ]
+      },
+      "search_successful": true,
+      "result_length": 6191,
+      "result_preview": "# Prior Art Search Report: Mobile Edge Computing (MEC) and 5G\n\n## EXECUTIVE SUMMARY\n- **Risk Level:** \ud83d\udd34 High\n- **Key Blocking Patents:**\n  1. **Patent ID:** 10003935 - System and method for optimizing push services in cloud based mobile networks using a software API driven approach\n  2. **Patent ID:** 10009222 - Input method engine management for edge services\n  3. **Patent ID:** 10002536 - Apparatus and method for providing service in vehicle to everything communication system\n- **Immediate Act...",
+      "timestamp": "2025-08-19T15:46:10.029838"
+    }
+  ]
+}

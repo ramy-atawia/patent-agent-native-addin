@@ -1,0 +1,207 @@
+/* Modern chat message container with proper spacing */
+.message {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 16px 0;
+  padding: 0 20px;
+}
+
+/* Message alignment - user right, assistant left */
+.message.user {
+  justify-content: flex-end;
+}
+
+.message.assistant {
+  justify-content: flex-start;
+}
+
+/* Modern bubble design with proper sizing */
+.message-content {
+  position: relative;
+  display: inline-block;
+  max-width: 70%; /* Optimal reading width */
+  min-width: 120px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin: 0 8px;
+}
+
+/* Assistant messages - Light blue theme */
+.message.assistant .message-content {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #bbdefb;
+  border-radius: 18px 18px 18px 4px; /* Tail on bottom-left */
+}
+
+/* User messages - Professional gray theme */
+.message.user .message-content {
+  background: #0078d4;
+  color: #ffffff;
+  border: 1px solid #005a9e;
+  border-radius: 18px 18px 4px 18px; /* Tail on bottom-right */
+}
+
+/* Loading and streaming message states - override assistant styling */
+.message.assistant .message-content.loading-message,
+.message.assistant .message-content.streaming-message {
+  background: #e3f2fd !important;
+  color: #1565c0 !important;
+  border: 1px solid #bbdefb !important;
+}
+
+/* Modern avatar positioning outside bubbles */
+.bubble-avatar {
+  position: absolute;
+  bottom: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Assistant avatar on the left */
+.message.assistant .bubble-avatar {
+  left: -36px;
+}
+
+/* User avatar on the right */
+.message.user .bubble-avatar {
+  right: -36px;
+}
+
+/* Avatar styling */
+.bubble-avatar .avatar,
+.bubble-avatar img,
+.bubble-avatar .initials {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border: 2px solid #ffffff;
+}
+
+/* Assistant avatar - Novitai branding */
+.message.assistant .bubble-avatar .initials,
+.message.assistant .bubble-avatar .avatar {
+  background: #0078d4;
+  color: #ffffff;
+}
+
+/* User avatar - neutral styling */
+.message.user .bubble-avatar .initials {
+  background: #6c757d;
+  color: #ffffff;
+}
+
+/* Insert button positioning - bottom right corner */
+.insert-button-container {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Show insert button on message hover */
+.message:hover .insert-button-container {
+  opacity: 1;
+}
+
+/* Always show for assistant messages (more likely to be inserted) */
+.message.assistant .insert-button-container {
+  opacity: 0.7;
+}
+
+.message.assistant:hover .insert-button-container {
+  opacity: 1;
+}
+
+/* Message content styling */
+.main-content { 
+  display: block; 
+  font-size: 14px; 
+  line-height: 1.4;
+  word-break: break-word; 
+  white-space: pre-wrap; 
+}
+
+/* Message header - minimal design */
+.message-header {
+  display: none; /* Hide by default for cleaner look */
+}
+
+/* Timestamp - show on hover */
+.message-timestamp {
+  position: absolute;
+  bottom: -20px;
+  font-size: 11px;
+  color: #6c757d;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+/* Show timestamp on hover */
+.message:hover .message-timestamp {
+  opacity: 1;
+}
+
+/* Position timestamp correctly for each role */
+.message.assistant .message-timestamp {
+  left: 0;
+}
+
+.message.user .message-timestamp {
+  right: 0;
+}
+
+/* Mobile responsive design */
+@media (max-width: 768px) {
+  .message {
+    margin: 12px 0;
+    padding: 0 16px;
+  }
+  
+  .message-content {
+    max-width: 85%;
+    padding: 14px 18px;
+    font-size: 14px;
+  }
+  
+  .bubble-avatar {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .bubble-avatar .avatar,
+  .bubble-avatar img,
+  .bubble-avatar .initials {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .message.assistant .bubble-avatar {
+    left: -36px;
+  }
+  
+  .message.user .bubble-avatar {
+    right: -36px;
+  }
+  
+  .insert-button-container {
+    bottom: 6px;
+    right: 6px;
+  }
+}

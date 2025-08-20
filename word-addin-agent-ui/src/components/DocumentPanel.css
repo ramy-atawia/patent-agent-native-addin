@@ -1,0 +1,216 @@
+/* DocumentPanel Component Styles - Novitai Professional Design */
+.document-panel {
+  width: 300px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 500px;
+  border: 1px solid #e1e1e1;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #e1e1e1;
+}
+
+.panel-header h3 {
+  margin: 0;
+  color: #323130;
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.refresh-btn:hover {
+  background: #e9ecef;
+}
+
+.document-stats {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e1e1e1;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.stat-item:last-child {
+  margin-bottom: 0;
+}
+
+.stat-label {
+  color: #605e5c;
+  font-size: 0.9rem;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #323130;
+  font-size: 1rem;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.document-actions {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e1e1e1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.action-button {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.action-button.primary {
+  background: #0078d4;
+  color: white;
+}
+
+.action-button.primary:hover:not(:disabled) {
+  background: #005a9e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 120, 212, 0.3);
+}
+
+.action-button.secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.action-button.secondary:hover:not(:disabled) {
+  background: #5a6268;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+}
+
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.document-preview {
+  padding: 1rem 1.5rem;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.document-preview h4 {
+  margin: 0 0 0.75rem 0;
+  color: #323130;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.preview-content {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e1e1e1;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #323130;
+  flex: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  min-height: 0;
+  max-height: 300px;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.loading-indicator {
+  padding: 2rem;
+  text-align: center;
+  color: #605e5c;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.error-message {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #d13438;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+  margin: 1rem;
+}
+
+.error-message p {
+  margin: 0.5rem 0;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.error-details {
+  font-size: 0.9rem;
+  color: #721c24;
+  font-family: monospace;
+  word-break: break-word;
+}
+
+.retry-btn {
+  background: #d13438;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 1rem;
+  transition: background-color 0.2s ease;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.retry-btn:hover {
+  background: #b02a37;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .document-panel {
+    width: 100%;
+    margin-top: 1rem;
+  }
+  
+  .panel-header,
+  .document-stats,
+  .document-actions,
+  .document-preview {
+    padding: 0.75rem 1rem;
+  }
+}

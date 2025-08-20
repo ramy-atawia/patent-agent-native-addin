@@ -1,0 +1,83 @@
+[
+  {
+    "test_name": "Basic Review Claims Functionality",
+    "test_type": "PROTECTION",
+    "input_data": "1. A method for processing data comprising receiving input data and processing the data.",
+    "expected_behavior": "Should detect CLAIM_REVIEW intent and execute review_claims function",
+    "actual_result": "Response: I've reviewed your patent claims and found 5 issue(s):\n\n\ud83d\udfe2 **MINOR**: 1. **USPTO Compliance**: - **Pr... | Reasoning: Executing claim_review (confidence: 0.95). The user explicitly requests to 'review this claim', indi...",
+    "status": "\u2705 PASS",
+    "timestamp": 13.081814625
+  },
+  {
+    "test_name": "Complex Multi-Claim Review",
+    "test_type": "PROTECTION",
+    "input_data": "1. A system for processing data comprising:\n   a processor configured to execute instructions;\n   a memory storing the instructions; and\n   an output device for displaying results.\n\n2. The system of c...",
+    "expected_behavior": "Should handle complex multi-claim input and provide detailed review feedback",
+    "actual_result": "Response Length: 4280 chars | Content: I've reviewed your patent claims and found 8 issue(s):\n\n\ud83d\udfe2 **MINOR**: Here is a review of the provide...",
+    "status": "\u2705 PASS",
+    "timestamp": 28.512539708
+  },
+  {
+    "test_name": "CLAIM_REVIEW Intent Classification - Request 1",
+    "test_type": "PROTECTION",
+    "input_data": "review my patent claims",
+    "expected_behavior": "Should classify all review requests as CLAIM_REVIEW with high confidence (>0.7)",
+    "actual_result": "Reasoning: Executing claim_review (confidence: 0.95). The user explicitly requests to 'review my patent claims'...",
+    "status": "\u2705 PASS",
+    "timestamp": 45.513146041
+  },
+  {
+    "test_name": "CLAIM_REVIEW Intent Classification - Request 2",
+    "test_type": "PROTECTION",
+    "input_data": "check these claims for compliance",
+    "expected_behavior": "Should classify all review requests as CLAIM_REVIEW with high confidence (>0.7)",
+    "actual_result": "Reasoning: Executing claim_review (confidence: 0.95). The user explicitly requested to 'check these claims for ...",
+    "status": "\u2705 PASS",
+    "timestamp": 51.050984916
+  },
+  {
+    "test_name": "CLAIM_REVIEW Intent Classification - Request 3",
+    "test_type": "PROTECTION",
+    "input_data": "validate my patent claims",
+    "expected_behavior": "Should classify all review requests as CLAIM_REVIEW with high confidence (>0.7)",
+    "actual_result": "Reasoning: Executing claim_review (confidence: 0.9). The user explicitly requested to 'validate my patent claim...",
+    "status": "\u2705 PASS",
+    "timestamp": 68.146325708
+  },
+  {
+    "test_name": "CLAIM_REVIEW Intent Classification - Request 4",
+    "test_type": "PROTECTION",
+    "input_data": "analyze these claims for quality",
+    "expected_behavior": "Should classify all review requests as CLAIM_REVIEW with high confidence (>0.7)",
+    "actual_result": "Reasoning: Executing claim_review (confidence: 0.95). The user explicitly requests to 'analyze these claims for...",
+    "status": "\u2705 PASS",
+    "timestamp": 84.937236375
+  },
+  {
+    "test_name": "Review Claims vs Draft Claims Comparison",
+    "test_type": "PROTECTION",
+    "input_data": "draft_claims + review_claims",
+    "expected_behavior": "Both functions should work independently and correctly",
+    "actual_result": "Draft: \u2705 | Review: \u2705",
+    "status": "\u2705 PASS",
+    "timestamp": 107.781100041
+  },
+  {
+    "test_name": "Review Claims Error Handling",
+    "test_type": "PROTECTION",
+    "input_data": "empty + malformed inputs",
+    "expected_behavior": "Should handle edge cases gracefully without crashing",
+    "actual_result": "Error handling tests completed",
+    "status": "INFO",
+    "timestamp": 137.5706165
+  },
+  {
+    "test_name": "Review Claims Response Format",
+    "test_type": "PROTECTION",
+    "input_data": "1. A method for data processing.",
+    "expected_behavior": "Should return formatted response with severity levels and emojis",
+    "actual_result": "Emojis: \u2705 | Text: \u2705 | Count: \u2705",
+    "status": "\u2705 PASS",
+    "timestamp": 150.431660125
+  }
+]
