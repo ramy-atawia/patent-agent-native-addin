@@ -81,7 +81,7 @@ class DocumentService {
   }
 
   /**
-   * Insert text at the current selection or cursor position
+   * Insert text or HTML at the current selection or cursor position
    */
   async insertText(text: string, formatting?: WordFormatting): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -92,16 +92,25 @@ class DocumentService {
           
           await context.sync();
           
-          if (selection.text.length > 0) {
-            // Replace selection
-            selection.insertText(text, 'Replace');
+          // Check if content is HTML and handle accordingly
+          if (text.includes('<') && text.includes('>')) {
+            // Insert as HTML for proper formatting
+            if (selection.text.length > 0) {
+              selection.insertHtml(text, Word.InsertLocation.replace);
+            } else {
+              selection.insertHtml(text, Word.InsertLocation.before);
+            }
           } else {
-            // Insert at cursor
-            selection.insertText(text, 'Before');
+            // Insert as plain text
+            if (selection.text.length > 0) {
+              selection.insertText(text, 'Replace');
+            } else {
+              selection.insertText(text, 'Before');
+            }
           }
           
-          // Apply formatting if specified
-          if (formatting) {
+          // Apply formatting if specified (only for plain text)
+          if (formatting && !text.includes('<')) {
             this.applyFormattingToRange(selection, formatting);
           }
           

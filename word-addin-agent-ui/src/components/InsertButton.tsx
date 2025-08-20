@@ -3,33 +3,44 @@ import './InsertButton.css';
 
 interface InsertButtonProps {
   content: string;
-  onInsert: (content: string) => void;
   disabled?: boolean;
+  onInsert?: (content: string) => Promise<void> | void;
 }
 
-const InsertButton: React.FC<InsertButtonProps> = ({ content, onInsert, disabled = false }) => {
+const InsertButton: React.FC<InsertButtonProps> = ({ content, disabled = false, onInsert }) => {
   const handleInsert = async () => {
-    if (disabled) return;
+    if (disabled || !content.trim()) return;
     
     try {
-      // Check if Office.js is available
-      if (typeof Office !== 'undefined' && typeof Word !== 'undefined') {
+      // Try callback first, then fallback to Office.js
+      if (onInsert) {
+        await onInsert(content);
+      } else if (typeof Office !== 'undefined' && typeof Word !== 'undefined') {
         await Word.run(async (context: any) => {
           const selection = context.document.getSelection();
-          selection.insertText(content, 'Replace');
+          
+          if (content.includes('<') && content.includes('>')) {
+            // Use insertHtml with proper Word.InsertLocation to prevent auto-conversion
+            selection.insertHtml(content, Word.InsertLocation.replace);
+            
+            // Force context sync and then select the inserted content
+            await context.sync();
+            
+            // This prevents Word's auto-conversion back to raw HTML
+            selection.select();
+            await context.sync();
+          } else {
+            // Insert as plain text for non-HTML content
+            selection.insertText(content, 'Replace');
+          }
+          
           await context.sync();
         });
-        // Call the onInsert callback after successful insertion
-        onInsert(content);
       } else {
         console.warn('Office.js not available');
-        // Fallback to the onInsert callback
-        onInsert(content);
       }
     } catch (error) {
       console.error('Error inserting content:', error);
-      // Still call onInsert even if Word.js fails
-      onInsert(content);
     }
   };
 

@@ -213,6 +213,8 @@ export const ChatBot: React.FC = () => {
     }
 
     try {
+      // Keep the original HTML content for proper formatting
+      // The InsertButton component will handle HTML insertion properly
       await documentService.insertText(content);
     } catch (error) {
       console.error('Error inserting content:', error);
@@ -256,16 +258,7 @@ export const ChatBot: React.FC = () => {
     setShowUndoToast(false);
   };
 
-  useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
-        setProfileMenuOpen(false);
-      }
-    };
 
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
 
   if (!isAuthenticated) {
     return (

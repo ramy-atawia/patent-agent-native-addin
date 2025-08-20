@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -258,59 +258,40 @@ const MarkdownConverter: React.FC<MarkdownConverterProps> = ({
   showPreview = true,
   className
 }) => {
+  const markdownRef = useRef<HTMLDivElement>(null);
   
-  // Convert markdown to HTML and notify parent
-  const handleMarkdownRender = (node: any) => {
-    if (onConvert && node) {
-      // Get the HTML content
-      const htmlContent = node.innerHTML;
+  // Convert markdown to HTML and notify parent when content changes
+  useEffect(() => {
+    if (onConvert && markdownRef.current) {
+      // Get the HTML content after render
+      const htmlContent = markdownRef.current.innerHTML;
       onConvert(htmlContent);
     }
-  };
+  }, [markdown, onConvert]);
 
-  // Custom components for enhanced styling
+  // Custom components for enhanced styling (let styled-components handle the styling)
   const components = {
-    // Custom heading components
-    h1: ({ children, ...props }: any) => (
-      <h1 {...props} style={{ color: '#2c3e50', borderBottom: '3px solid #3498db' }}>
-        {children}
-      </h1>
-    ),
+    h1: ({ children, ...props }: any) => <h1 {...props}>{children}</h1>,
+    h2: ({ children, ...props }: any) => <h2 {...props}>{children}</h2>,
+    table: ({ children, ...props }: any) => <table {...props}>{children}</table>,
     
-    h2: ({ children, ...props }: any) => (
-      <h2 {...props} style={{ color: '#34495e', borderBottom: '2px solid #ecf0f1' }}>
-        {children}
-      </h2>
-    ),
-    
-    // Custom table component
-    table: ({ children, ...props }: any) => (
-      <table {...props} style={{ borderCollapse: 'collapse', width: '100%' }}>
-        {children}
-      </table>
-    ),
-    
-    // Custom code block component
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');
       return !inline ? (
-        <pre style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px' }}>
+        <pre>
           <code className={className} {...props}>
             {children}
           </code>
         </pre>
       ) : (
-        <code className={className} {...props} style={{ backgroundColor: '#f8f9fa', padding: '2px 6px' }}>
+        <code className={className} {...props}>
           {children}
         </code>
       );
     },
     
-    // Custom blockquote component
     blockquote: ({ children, ...props }: any) => (
-      <blockquote {...props} style={{ borderLeft: '4px solid #3498db', backgroundColor: '#f8f9fa' }}>
-        {children}
-      </blockquote>
+      <blockquote {...props}>{children}</blockquote>
     ),
   };
 
@@ -318,13 +299,15 @@ const MarkdownConverter: React.FC<MarkdownConverterProps> = ({
     <div className={className}>
       {showPreview && (
         <StyledMarkdown>
-                  <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw]}
-          components={components}
-        >
-            {markdown}
-          </ReactMarkdown>
+          <div ref={markdownRef}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
+              components={components}
+            >
+              {markdown}
+            </ReactMarkdown>
+          </div>
         </StyledMarkdown>
       )}
     </div>

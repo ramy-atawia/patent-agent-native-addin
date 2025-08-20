@@ -36,7 +36,44 @@ def validate_environment():
 if not validate_environment():
     raise RuntimeError("Environment validation failed. Please check your .env file.")
 
-app = FastAPI()
+app = FastAPI(
+    title="Novitai Patent Drafting API",
+    description="""
+    ## AI-Powered Patent Drafting and Prior Art Research API
+    
+    This API provides comprehensive patent drafting assistance powered by Azure OpenAI.
+    It offers intelligent patent claim generation, prior art research, and real-time 
+    streaming responses for an interactive user experience.
+    
+    ### Key Features
+    - **AI-Powered Patent Drafting**: Generate professional patent claims using advanced LLM
+    - **Prior Art Research**: Intelligent search and analysis of existing patents  
+    - **Real-time Streaming**: Server-sent events for live response streaming
+    - **Session Management**: Conversation context and history tracking
+    - **Document Integration**: Support for Word document content analysis
+    
+    ### Usage
+    1. Start a patent drafting run with `/api/patent/run`
+    2. Stream real-time results with `/api/patent/stream`
+    3. Search prior art with `/api/patent/prior-art`
+    4. Manage sessions with `/api/sessions`
+    """,
+    version="1.0.0",
+    terms_of_service="https://novitai.com/terms",
+    contact={
+        "name": "Novitai API Support",
+        "url": "https://novitai.com/support",
+        "email": "api-support@novitai.com",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    servers=[
+        {"url": "http://localhost:8000", "description": "Development server"},
+        {"url": "https://api.novitai.com", "description": "Production server"},
+    ]
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -324,9 +361,22 @@ class RunRequest(BaseModel):
 # Initialize service
 service = SimplePatentService()
 
-@app.post("/api/patent/run")
+@app.post("/api/patent/run", tags=["Patent Drafting"])
 async def start_run(request: RunRequest):
-    """Start a new patent drafting run. Accepts labeled fields from UI."""
+    """
+    Start a new patent drafting run.
+    
+    Initiates a new patent drafting session or continues an existing one.
+    This endpoint accepts user input and document content to generate patent claims
+    and professional responses using AI.
+    
+    - **user_message**: Natural language description of the invention
+    - **document_content**: Optional Word document content for context
+    - **conversation_history**: Previous messages for context
+    - **session_id**: Optional ID to continue existing session
+    
+    Returns a unique run_id for streaming the response.
+    """
     try:
         # Prefer user_message if provided, otherwise fall back to legacy disclosure
         disclosure = request.user_message or request.disclosure or ""
@@ -349,9 +399,21 @@ async def start_run(request: RunRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/patent/prior-art")
+@app.post("/api/patent/prior-art", tags=["Prior Art Research"])
 async def prior_art_search_endpoint(request: RunRequest):
-    """Endpoint to trigger prior art search using user_message or disclosure"""
+    """
+    Search for prior art patents.
+    
+    Performs intelligent prior art search using PatentsView API and Google Patents.
+    Returns comprehensive analysis in markdown format for easy integration
+    into patent reports.
+    
+    Features:
+    - Smart query extraction from natural language
+    - Multi-source patent database search  
+    - Relevance scoring and ranking
+    - Professional markdown report generation
+    """
     try:
         search_query = request.user_message or request.disclosure or ""
         if not search_query:
@@ -380,18 +442,31 @@ async def prior_art_search_endpoint(request: RunRequest):
         print(f"❌ Prior art endpoint failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/patent/run/{run_id}")
+@app.get("/api/patent/run/{run_id}", tags=["Patent Drafting"])
 async def get_run_details(run_id: str):
-    """Get run details"""
+    """
+    Get detailed information about a patent drafting run.
+    
+    Retrieves the complete run information including status, results,
+    and any generated patent claims.
+    """
     try:
         return await service.get_run_details(run_id)
     except Exception as e:
         print(f"❌ Error getting run details: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/patent/stream")
+@app.get("/api/patent/stream", tags=["Patent Drafting"])
 async def stream_run(run_id: str):
-    """Stream a patent drafting run"""
+    """
+    Stream patent drafting results in real-time.
+    
+    Uses Server-Sent Events (SSE) to provide live updates as the AI
+    processes the patent drafting request. Events include status updates,
+    reasoning, tool calls, and final results.
+    
+    Event types: status, reasoning, tool_call, tool_result, final, done, error
+    """
     async def event_generator():
         try:
             async for event in service.stream_run(run_id):
@@ -412,9 +487,14 @@ async def stream_run(run_id: str):
         }
     )
 
-@app.get("/api/debug/env")
+@app.get("/api/debug/env", tags=["Debug"])
 async def debug_env():
-    """Debug endpoint to check environment variables"""
+    """
+    Check environment variables status.
+    
+    ⚠️ Development only - returns masked environment variables
+    for system diagnostics. Sensitive values are masked for security.
+    """
     def mask(val: str):
         if not val:
             return None
@@ -430,9 +510,14 @@ async def debug_env():
         "agent_type": "simple_v1"
     }
 
-@app.get("/api/sessions")
+@app.get("/api/sessions", tags=["Session Management"])
 async def list_sessions():
-    """List all active sessions"""
+    """
+    List all active conversation sessions.
+    
+    Returns summary information about all sessions including
+    start time, topic, and number of runs.
+    """
     try:
         sessions = []
         for session_id, session_data in service._sessions.items():
@@ -451,9 +536,14 @@ async def list_sessions():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/api/debug/session/{session_id}")
+@app.get("/api/debug/session/{session_id}", tags=["Debug"])
 async def debug_session(session_id: str):
-    """Debug endpoint to see session history"""
+    """
+    Get detailed session debug information.
+    
+    ⚠️ Development only - provides full session history and metadata
+    for debugging purposes. Should not be exposed in production.
+    """
     try:
         if session_id not in service._sessions:
             return {"error": "Session not found"}
@@ -473,9 +563,14 @@ async def debug_session(session_id: str):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/")
+@app.get("/", tags=["System"])
 async def root():
-    """Root endpoint"""
+    """
+    API health check and service information.
+    
+    Returns basic service information and operational status.
+    Use this endpoint to verify the API is running and accessible.
+    """
     return {
         "service": "Simple Patent Drafting Service",
         "version": "1.0",

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import InsertButton from './InsertButton';
 import { ChatMessage } from '../services/api';
+import MarkdownConverter from './MarkdownConverter';
 import './MessageBubble.css';
 
 interface MessageBubbleProps {
@@ -10,6 +11,7 @@ interface MessageBubbleProps {
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert }) => {
   const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);
+  const [convertedHtml, setConvertedHtml] = useState<string>('');
 
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -34,9 +36,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert 
 
   const { mainContent, reasoning } = isAssistant ? parseAssistantMessage(message.content) : { mainContent: message.content, reasoning: null };
 
-  const isSingleLine = !mainContent.includes('\n') && mainContent.trim().length <= 80;
 
-  const displayName = null; // handled elsewhere for initials if needed
 
   const avatarNode = isAssistant ? (
     <img src="/assets/novitai-logo.png" alt="Novitai" className="avatar inside" />
@@ -52,7 +52,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert 
       
       <div className="message-content">
         <div className="main-content">
-          {mainContent}
+          {isAssistant ? (
+            <MarkdownConverter 
+              markdown={mainContent}
+              className="assistant-markdown"
+              showPreview={true}
+              onConvert={setConvertedHtml}
+            />
+          ) : (
+            mainContent
+          )}
         </div>
         
         {reasoning && (
@@ -75,7 +84,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert 
         {isAssistant && (
           <div className="insert-button-container">
             <InsertButton 
-              content={mainContent}
+              content={convertedHtml && convertedHtml.trim() ? convertedHtml : mainContent}
               onInsert={onInsert}
             />
           </div>

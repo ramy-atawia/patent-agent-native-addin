@@ -1,0 +1,725 @@
+openapi: 3.0.3
+info:
+  title: Novitai Patent Drafting API
+  description: |
+    # AI-Powered Patent Drafting and Prior Art Research API
+    
+    This API provides comprehensive patent drafting assistance powered by Azure OpenAI. 
+    It offers intelligent patent claim generation, prior art research, and real-time 
+    streaming responses for an interactive user experience.
+    
+    ## Key Features
+    - **AI-Powered Patent Drafting**: Generate professional patent claims using advanced LLM
+    - **Prior Art Research**: Intelligent search and analysis of existing patents  
+    - **Real-time Streaming**: Server-sent events for live response streaming
+    - **Session Management**: Conversation context and history tracking
+    - **Document Integration**: Support for Word document content analysis
+    
+    ## Authentication
+    Currently, the API supports public access. Enterprise authentication can be added.
+    
+    ## Rate Limiting
+    No rate limiting is currently enforced, but may be added for production use.
+    
+  version: 1.0.0
+  termsOfService: https://novitai.com/terms
+  contact:
+    name: Novitai API Support
+    url: https://novitai.com/support
+    email: api-support@novitai.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.novitai.com
+    description: Production server
+
+tags:
+  - name: Patent Drafting
+    description: Core patent drafting and claim generation
+  - name: Prior Art Research
+    description: Patent search and prior art analysis
+  - name: Session Management
+    description: Conversation sessions and history
+  - name: System
+    description: Health checks and system information
+  - name: Debug
+    description: Development and debugging endpoints
+
+paths:
+  /:
+    get:
+      tags:
+        - System
+      summary: Health Check
+      description: |
+        Returns basic service information and operational status.
+        Use this endpoint to verify the API is running and accessible.
+      responses:
+        '200':
+          description: Service is operational
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: "Simple Patent Drafting Service"
+                  version:
+                    type: string
+                    example: "1.0"
+                  functions:
+                    type: array
+                    items:
+                      type: string
+                    example: ["draft_claims", "general_conversation"]
+                  status:
+                    type: string
+                    example: "operational"
+
+  /api/patent/run:
+    post:
+      tags:
+        - Patent Drafting
+      summary: Start Patent Drafting Run
+      description: |
+        Initiates a new patent drafting session or continues an existing one.
+        This endpoint accepts user input and document content to generate patent claims
+        and professional responses using AI.
+        
+        **Key Features:**
+        - Accepts natural language descriptions of inventions
+        - Processes Word document content for context
+        - Maintains conversation history for context
+        - Returns unique run_id for streaming responses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+            examples:
+              simple_request:
+                summary: Simple patent request
+                value:
+                  user_message: "Help me draft claims for a 5G wireless communication system"
+              with_context:
+                summary: Request with document context
+                value:
+                  user_message: "Draft claims for this invention"
+                  document_content:
+                    text: "A novel method for optimizing 5G network performance..."
+                    paragraphs: ["Paragraph 1", "Paragraph 2"]
+                  session_id: "existing-session-uuid"
+              with_history:
+                summary: Request with conversation history
+                value:
+                  user_message: "Can you refine the claims we discussed?"
+                  conversation_history:
+                    - role: "user"
+                      content: "I need help with patent claims"
+                      timestamp: "2024-01-01T10:00:00Z"
+                    - role: "assistant"
+                      content: "I'll help you draft professional patent claims"
+                      timestamp: "2024-01-01T10:00:05Z"
+                  session_id: "session-uuid-123"
+      responses:
+        '200':
+          description: Run started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '400':
+          description: Invalid request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/patent/stream:
+    get:
+      tags:
+        - Patent Drafting
+      summary: Stream Patent Drafting Results
+      description: |
+        Streams real-time patent drafting results using Server-Sent Events (SSE).
+        This endpoint provides live updates as the AI processes the request.
+        
+        **Event Types:**
+        - `status`: Processing status updates
+        - `reasoning`: AI reasoning and thought process
+        - `tool_call`: When AI decides to use tools (e.g., draft claims)
+        - `tool_result`: Results from tool execution
+        - `final`: Complete response with claims/analysis
+        - `done`: Stream completion marker
+        - `error`: Error notifications
+        
+        **Usage:**
+        1. First call `/api/patent/run` to get a run_id
+        2. Use the run_id to stream results from this endpoint
+        3. Parse Server-Sent Events in your client
+      parameters:
+        - name: run_id
+          in: query
+          required: true
+          description: Unique identifier from /api/patent/run response
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Server-Sent Events stream with the following format:
+                  
+                  ```
+                  event: status
+                  data: {"status": "processing", "message": "Analyzing your request..."}
+                  
+                  event: reasoning  
+                  data: {"text": "I'll analyze your invention for patentability..."}
+                  
+                  event: tool_call
+                  data: {"tool": "draft_claims", "num_claims": 3}
+                  
+                  event: tool_result
+                  data: {"tool": "draft_claims", "success": true, "claims_generated": 3}
+                  
+                  event: final
+                  data: {"response": "Here are your patent claims...", "metadata": {...}, "data": {...}}
+                  
+                  event: done
+                  data: {}
+                  ```
+              examples:
+                complete_stream:
+                  summary: Complete streaming response
+                  value: |
+                    event: status
+                    data: {"status": "processing", "message": "Analyzing your request..."}
+                    
+                    event: reasoning
+                    data: {"text": "Based on your 5G invention description, I'll draft comprehensive claims..."}
+                    
+                    event: tool_call
+                    data: {"tool": "draft_claims", "num_claims": 3}
+                    
+                    event: tool_result
+                    data: {"tool": "draft_claims", "success": true, "claims_generated": 3}
+                    
+                    event: final
+                    data: {"response": "Here are your patent claims:\n\n1. A method for...", "metadata": {"should_draft_claims": true, "has_claims": true}, "data": {"claims": ["Claim 1...", "Claim 2..."], "num_claims": 3}}
+                    
+                    event: done
+                    data: {}
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/patent/run/{run_id}:
+    get:
+      tags:
+        - Patent Drafting
+      summary: Get Run Details
+      description: |
+        Retrieves detailed information about a specific patent drafting run,
+        including status, results, and execution metadata.
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          description: Unique run identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Run details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetails'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/patent/prior-art:
+    post:
+      tags:
+        - Prior Art Research
+      summary: Search Prior Art
+      description: |
+        Performs intelligent prior art search using PatentsView API and Google Patents.
+        Returns comprehensive analysis in markdown format for easy integration
+        into patent reports.
+        
+        **Features:**
+        - Smart query extraction from natural language
+        - Multi-source patent database search
+        - Relevance scoring and ranking
+        - Professional markdown report generation
+        - Claims analysis integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+            examples:
+              simple_search:
+                summary: Simple prior art search
+                value:
+                  user_message: "Search for prior art on wireless communication protocols"
+              detailed_search:
+                summary: Detailed search with context
+                value:
+                  user_message: "Find prior art for 5G beamforming optimization"
+                  document_content:
+                    text: "Our invention relates to adaptive beamforming in 5G networks..."
+      responses:
+        '200':
+          description: Prior art search completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorArtResponse'
+        '400':
+          description: Invalid search query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Search service error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/sessions:
+    get:
+      tags:
+        - Session Management
+      summary: List All Sessions
+      description: |
+        Returns a list of all active conversation sessions with summary information.
+        Useful for session management and user history tracking.
+      responses:
+        '200':
+          description: Sessions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionsList'
+
+  /api/debug/session/{session_id}:
+    get:
+      tags:
+        - Debug
+      summary: Get Session Debug Info
+      description: |
+        Provides detailed session information for debugging purposes,
+        including full conversation history and metadata.
+        
+        **⚠️ Development Only**: This endpoint should not be exposed in production.
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session debug information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDebugInfo'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/debug/env:
+    get:
+      tags:
+        - Debug
+      summary: Environment Variables Check
+      description: |
+        Returns masked environment variables for system diagnostics.
+        Sensitive values are masked for security.
+        
+        **⚠️ Development Only**: This endpoint should not be exposed in production.
+      responses:
+        '200':
+          description: Environment information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  AZURE_OPENAI_ENDPOINT:
+                    type: string
+                    example: "https://your-resource.openai.azure.com/"
+                  AZURE_OPENAI_API_VERSION:
+                    type: string
+                    example: "2024-02-01"
+                  AZURE_OPENAI_DEPLOYMENT_NAME:
+                    type: string
+                    example: "gpt-4"
+                  AZURE_OPENAI_API_KEY:
+                    type: string
+                    example: "abc1...xyz9"
+                    description: "Masked for security"
+                  agent_type:
+                    type: string
+                    example: "simple_v1"
+
+components:
+  schemas:
+    RunRequest:
+      type: object
+      description: Request to start a patent drafting run
+      properties:
+        user_message:
+          type: string
+          description: User's natural language input describing the invention
+          example: "Help me draft claims for a 5G network optimization system"
+        conversation_history:
+          type: array
+          description: Previous conversation messages for context
+          items:
+            $ref: '#/components/schemas/ConversationTurn'
+        document_content:
+          $ref: '#/components/schemas/DocumentContent'
+        disclosure:
+          type: string
+          description: "Legacy field - use user_message instead"
+          deprecated: true
+        session_id:
+          type: string
+          format: uuid
+          description: Optional session ID to continue existing conversation
+          example: "123e4567-e89b-12d3-a456-426614174000"
+
+    ConversationTurn:
+      type: object
+      description: Single message in conversation history
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+          description: Who sent the message
+        content:
+          type: string
+          description: Message content
+          example: "I need help drafting patent claims"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the message was sent
+          example: "2024-01-01T10:00:00Z"
+
+    DocumentContent:
+      type: object
+      description: Content from Word document for context
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: Full document text content
+          example: "A novel method for optimizing 5G network performance through adaptive beamforming..."
+        paragraphs:
+          type: array
+          description: Document broken into paragraphs
+          items:
+            type: string
+        selection:
+          type: object
+          description: Currently selected text in document
+          additionalProperties: true
+
+    RunResponse:
+      type: object
+      description: Response from starting a patent drafting run
+      required:
+        - run_id
+        - session_id
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          description: Unique identifier for this run
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        session_id:
+          type: string
+          format: uuid
+          description: Session identifier (new or existing)
+          example: "123e4567-e89b-12d3-a456-426614174000"
+
+    RunDetails:
+      type: object
+      description: Detailed information about a patent drafting run
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        disclosure:
+          type: string
+          description: Original user input
+        status:
+          type: string
+          enum: [started, processing, completed, error]
+          description: Current run status
+        created_at:
+          type: string
+          format: date-time
+        result:
+          $ref: '#/components/schemas/AgentResult'
+        raw_request:
+          $ref: '#/components/schemas/RunRequest'
+        error:
+          type: string
+          description: Error message if status is 'error'
+
+    AgentResult:
+      type: object
+      description: Results from AI agent processing
+      properties:
+        conversation_response:
+          type: string
+          description: AI's main response to the user
+        should_draft_claims:
+          type: boolean
+          description: Whether AI determined claims should be drafted
+        claims:
+          type: array
+          description: Generated patent claims
+          items:
+            type: string
+        reasoning:
+          type: string
+          description: AI's reasoning process
+
+    PriorArtResponse:
+      type: object
+      description: Prior art search results
+      required:
+        - results
+        - thought_process
+        - query
+        - total_found
+      properties:
+        results:
+          type: string
+          description: Formatted markdown report of search results
+          example: |
+            # Prior Art Search Report: Wireless Communication Protocols
+            
+            ## Executive Summary
+            Found 15 relevant patents...
+            
+            ## Risk Assessment Matrix
+            | Patent ID | Title | Risk Level |
+            |-----------|-------|------------|
+            | 10004074 | Transmission coordination... | High |
+        thought_process:
+          type: string
+          description: AI's analysis process
+          example: "Prior art search completed for: wireless communication protocols"
+        query:
+          type: string
+          description: Processed search query
+          example: "wireless communication protocols"
+        total_found:
+          type: integer
+          description: Total number of patents found
+          example: 15
+        timestamp:
+          type: string
+          format: date-time
+          description: When the search was performed
+        patents:
+          type: array
+          description: List of patent IDs found
+          items:
+            type: string
+          example: ["10004074", "10004129", "10009148"]
+
+    SessionsList:
+      type: object
+      description: List of active sessions
+      properties:
+        total_sessions:
+          type: integer
+          description: Total number of sessions
+          example: 5
+        sessions:
+          type: array
+          description: Session summaries
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+
+    SessionSummary:
+      type: object
+      description: Summary information about a session
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        started_at:
+          type: string
+          format: date-time
+        topic:
+          type: string
+          description: Brief description of session topic
+          example: "5G networking invention..."
+        total_runs:
+          type: integer
+          description: Number of runs in this session
+          example: 3
+        last_run:
+          type: string
+          format: uuid
+          description: ID of most recent run
+
+    SessionDebugInfo:
+      type: object
+      description: Detailed session information for debugging
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        started_at:
+          type: string
+          format: date-time
+        topic:
+          type: string
+        runs:
+          type: array
+          description: All run IDs in this session
+          items:
+            type: string
+            format: uuid
+        session_history:
+          type: string
+          description: Full conversation history
+        history_length:
+          type: integer
+          description: Character count of history
+        history_preview:
+          type: string
+          description: Truncated preview of history
+
+    ErrorResponse:
+      type: object
+      description: Standard error response
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: "Disclosure or user_message is required"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token authentication (not currently implemented).
+        Future versions will support enterprise authentication.
+
+# Example usage documentation
+x-examples:
+  complete_workflow:
+    summary: Complete Patent Drafting Workflow
+    description: |
+      This example shows a complete workflow from initial request to final patent claims:
+      
+      1. **Start a run**: POST /api/patent/run
+      2. **Stream results**: GET /api/patent/stream?run_id={run_id}
+      3. **Get final details**: GET /api/patent/run/{run_id}
+      
+      ```javascript
+      // 1. Start the run
+      const runResponse = await fetch('/api/patent/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_message: "Draft claims for a 5G beamforming system",
+          document_content: {
+            text: "Our invention relates to adaptive beamforming..."
+          }
+        })
+      });
+      const { run_id } = await runResponse.json();
+      
+      // 2. Stream the results
+      const eventSource = new EventSource(`/api/patent/stream?run_id=${run_id}`);
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (event.type === 'final') {
+          console.log('Final response:', data.response);
+          console.log('Generated claims:', data.data?.claims);
+        }
+      };
+      
+      // 3. Get complete details
+      const detailsResponse = await fetch(`/api/patent/run/${run_id}`);
+      const runDetails = await detailsResponse.json();
+      ```
+
+  prior_art_workflow:
+    summary: Prior Art Research Workflow
+    description: |
+      Example of conducting prior art research:
+      
+      ```javascript
+      const priorArtResponse = await fetch('/api/patent/prior-art', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_message: "Find prior art for wireless mesh networking protocols"
+        })
+      });
+      
+      const results = await priorArtResponse.json();
+      console.log('Total patents found:', results.total_found);
+      console.log('Formatted report:', results.results); // Markdown format
+      console.log('Patent IDs:', results.patents);
+      ```
