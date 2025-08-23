@@ -4,6 +4,12 @@ Quick test script for 5G search with enhanced patent search system
 """
 
 import asyncio
+import sys
+import os
+
+# Add the src directory to Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
 from prior_art_search import PatentSearchEngine
 
 async def test_5g_search():

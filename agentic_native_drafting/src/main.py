@@ -597,10 +597,14 @@ async def search_prior_art(query: str, max_results: int = 20):
             max_results=max_results
         )
         
+        # Generate comprehensive report
+        report = await search_engine.generate_report(search_result)
+        
         return {
             "query": query,
             "total_results": len(search_result.patents) if hasattr(search_result, 'patents') else 0,
             "results": search_result.patents if hasattr(search_result, 'patents') else [],
+            "report": report,
             "status": "success",
             "search_result": search_result
         }
