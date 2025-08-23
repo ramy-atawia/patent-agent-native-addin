@@ -124,18 +124,47 @@ export const ChatBot: React.FC = () => {
         (chunk: string) => {
           // ignore updates if aborted
           if (abortControllerRef.current && abortControllerRef.current.signal.aborted) return;
-          setStreamingResponse(chunk); // Replace instead of append for cleaner streaming
+          
+          // Since the API service now properly classifies events, we can trust the chunks
+          // API service sends us already-classified content:
+          // - Short chunks from 'thoughts', 'reasoning', 'search_progress', etc. → Add to thoughts
+          // - Long chunks from 'results' → Set as final response
+          
+          // Simple detection: if it's very long, it's probably the final result
+          const isThoughtChunk = chunk.length < 2000; // Very generous threshold
+          
+          if (isThoughtChunk) {
+            // Add to thoughts array for real-time display
+            console.log('✅ Adding to thoughts:', chunk.substring(0, 50) + '...');
+            setStreamingThoughts(prev => {
+              const newThoughts = [...prev, chunk];
+              console.log('📝 Updated thoughts array:', newThoughts.map(t => t.substring(0, 30) + '...'));
+              return newThoughts;
+            });
+          } else {
+            // Set as final response
+            console.log('🎯 Setting as final response:', chunk.substring(0, 50) + '...');
+            setStreamingResponse(chunk);
+          }
         },
         (response) => {
-          // Handle complete response
+          // Handle complete response - create final message with thoughts
           const assistantMessage: ChatMessage = {
             role: 'assistant',
             content: response.response, // Changed from conversation_response to response
             timestamp: new Date().toISOString(),
+            // Add thoughts if we have them
+            thoughts: streamingThoughts.length > 0 ? [...streamingThoughts] : undefined,
           };
           
+          console.log('Final assistant message:', assistantMessage);
+          console.log('Message thoughts count:', assistantMessage.thoughts?.length || 0);
+          
           addMessage(assistantMessage);
+          
+          // Clear streaming state AFTER creating the message
           setStreamingResponse('');
+          setStreamingThoughts([]);
           
           // Update session ID if provided
           if (response.session_id) {

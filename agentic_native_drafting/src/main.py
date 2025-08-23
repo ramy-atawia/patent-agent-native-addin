@@ -12,25 +12,31 @@ from typing import List, Optional
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agent import agent
+from .agent import agent_with_thoughts
 from .models import AgentResponse
 
 class StreamEventType(str, Enum):
-    """Types of streaming events"""
-    INTENT_ANALYSIS = "intent_analysis"
-    INTENT_CLASSIFIED = "intent_classified" 
-    CLAIMS_DRAFTING_START = "claims_drafting_start"
-    CLAIMS_PROGRESS = "claims_progress"
-    CLAIMS_COMPLETE = "claims_complete"
-    PRIOR_ART_START = "prior_art_start"
-    PRIOR_ART_PROGRESS = "prior_art_progress"
-    PRIOR_ART_COMPLETE = "prior_art_complete"
-    ERROR = "error"
-    COMPLETE = "complete"
+    """Ultra-simplified streaming events - just what we actually need"""
+    # Core event types
+    THOUGHTS = "thoughts"           # All AI thinking/reasoning/progress → Small streaming bubbles  
+    RESULTS = "results"             # Final results/completion → Large final bubble
+    ERROR = "error"                 # Error states → Error handling
+
+class ThoughtEventData(BaseModel):
+    """Structure for thought events"""
+    thought_type: str
+    content: str
+    confidence: Optional[float] = None
+    metadata: Dict[str, Any] = {}
+    timestamp: str = datetime.now().isoformat()
 
 def create_sse_event(event_type: StreamEventType, data: Dict[str, Any]) -> str:
-    """Create a Server-Sent Event formatted message"""
-    return f"event: {event_type.value}\ndata: {json.dumps(data)}\n\n"
+    """Create a Server-Sent Event formatted message with enhanced data"""
+    # Add timestamp to all events
+    if "timestamp" not in data:
+        data["timestamp"] = datetime.now().isoformat()
+    
+    return f"event: {event_type.value}\ndata: {json.dumps(data, default=str)}\n\n"
 
 # Validate environment variables
 def validate_environment():
@@ -55,42 +61,38 @@ if not validate_environment():
     raise RuntimeError("Environment validation failed. Please check your .env file.")
 
 app = FastAPI(
-    title="Novitai Patent Drafting API",
+    title="Simplified Patent Drafting API with Streaming Thoughts",
     description="""
-    ## AI-Powered Patent Drafting and Prior Art Research API
+    ## AI-Powered Patent Drafting with Simplified Real-time Streaming
     
-    This API provides comprehensive patent drafting assistance powered by Azure OpenAI.
-    It offers intelligent patent claim generation, prior art research, and real-time 
-    streaming responses for an interactive user experience.
+    This simplified API provides patent drafting assistance with clean, streamlined
+    real-time streaming of AI thoughts and final results.
     
-    ### Key Features
-    - **AI-Powered Patent Drafting**: Generate professional patent claims using advanced LLM
-    - **Prior Art Research**: Intelligent search and analysis of existing patents  
-    - **Real-time Streaming**: Server-sent events for live response streaming
-    - **Session Management**: Conversation context and history tracking
-    - **Document Integration**: Support for Word document content analysis
+    ### Simplified Architecture in v3.0
+    - **4 Event Types Only**: thoughts, results, error, low_confidence
+    - **Clean Thought Stream**: Only meaningful AI reasoning, no noise
+    - **Clear Results**: Final outputs clearly separated from thoughts
+    - **Better UX**: Reduced complexity, improved performance
+    
+    ### Streaming Event Types (Simplified)
+    - `thoughts` - All AI reasoning and decision-making content
+    - `results` - Final completed results and outputs
+    - `error` - Error states and messages
+    - `low_confidence` - When AI needs clarification from user
     
     ### Usage
     1. Start a patent drafting run with `/api/patent/run`
     2. Stream real-time results with `/api/patent/stream`
-    3. All requests (prior art + claims) go through the unified streaming pipeline
-    4. Manage sessions with `/api/sessions`
+    3. Receive clean thought streams and clear final results
+    4. Simple 4-event architecture for easy frontend integration
     """,
-    version="1.0.0",
+    version="3.0.0",
     terms_of_service="https://novitai.com/terms",
     contact={
         "name": "Novitai API Support",
         "url": "https://novitai.com/support",
         "email": "api-support@novitai.com",
-    },
-    license_info={
-        "name": "MIT",
-        "url": "https://opensource.org/licenses/MIT",
-    },
-    servers=[
-        {"url": "http://localhost:8000", "description": "Development server"},
-        {"url": "https://api.novitai.com", "description": "Production server"},
-    ]
+    }
 )
 
 # Add CORS middleware
@@ -102,11 +104,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class SimplePatentService:
+class EnhancedPatentService:
     def __init__(self):
         self._runs: Dict[str, Dict[str, Any]] = {}
-        self._sessions: Dict[str, Dict[str, Any]] = {}  # Session management
-        self._session_history: Dict[str, str] = {}      # Session-level history
+        self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._session_history: Dict[str, str] = {}
+        self._performance_metrics: Dict[str, List[float]] = {}
 
     async def start_run(self, disclosure: str, session_id: str = None) -> Dict[str, str]:
         """Start a new patent drafting run or continue existing session"""
@@ -128,13 +131,18 @@ class SimplePatentService:
             }
             print(f"🆕 Starting new session {session_id} with run {run_id}")
         
-        # Create run
+        # Create run with enhanced metadata
         self._runs[run_id] = {
             "run_id": run_id,
             "session_id": session_id,
             "disclosure": disclosure,
             "status": "started",
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
+            "metrics": {
+                "start_time": datetime.now().timestamp(),
+                "events_streamed": 0,
+                "thoughts_generated": 0
+            }
         }
         
         # Initialize session history if new session
@@ -149,33 +157,41 @@ class SimplePatentService:
             conversation_entry = f"User: {user_input}\nAgent: {agent_response}\n---\n"
             self._session_history[session_id] += conversation_entry
         else:
-            # Initialize session history if it doesn't exist
             self._session_history[session_id] = f"User: {user_input}\nAgent: {agent_response}\n---\n"
 
     def _get_session_history(self, session_id: str) -> str:
         """Get the complete session history for context building"""
         history = self._session_history.get(session_id, "")
         if history:
-            # Truncate very long histories to prevent context overflow
-            max_length = 8000  # Reasonable limit for LLM context
+            max_length = 8000
             if len(history) > max_length:
-                # Keep the most recent conversations (last 8000 chars)
                 history = "..." + history[-max_length:]
-                print(f"⚠️  Session history truncated for session {session_id} (was {len(self._session_history[session_id])} chars)")
+                print(f"⚠️  Session history truncated for session {session_id}")
         return history
 
     async def get_run_details(self, run_id: str) -> Dict[str, Any]:
-        """Get run details"""
+        """Get run details with enhanced metrics"""
         if run_id not in self._runs:
             raise HTTPException(status_code=404, detail="Run not found")
         return self._runs[run_id]
 
+    def _update_run_metrics(self, run_id: str, metric: str, value: Any = None):
+        """Update run metrics"""
+        if run_id in self._runs:
+            if metric == "event_streamed":
+                self._runs[run_id]["metrics"]["events_streamed"] += 1
+            elif metric == "thought_generated":
+                self._runs[run_id]["metrics"]["thoughts_generated"] += 1
+            elif metric == "end_time":
+                self._runs[run_id]["metrics"]["end_time"] = datetime.now().timestamp()
+                start_time = self._runs[run_id]["metrics"]["start_time"]
+                self._runs[run_id]["metrics"]["duration_seconds"] = datetime.now().timestamp() - start_time
+
     async def stream_run(self, run_id: str):
-        """Stream patent drafting run with true step-by-step streaming"""
+        """Enhanced streaming with LLM decision thoughts"""
         try:
             if run_id not in self._runs:
                 yield create_sse_event(StreamEventType.ERROR, {'error': 'Run not found'})
-                yield create_sse_event(StreamEventType.COMPLETE, {})
                 return
                 
             run_data = self._runs[run_id]
@@ -186,159 +202,151 @@ class SimplePatentService:
                 session_history = self._get_session_history(run_data["session_id"])
                 if session_history:
                     print(f"🔍 Using session context ({len(session_history)} chars) for run {run_id}")
-                else:
-                    print(f"🆕 No session context available for run {run_id}")
                 
-                # Use the new streaming agent method
-                async for event in agent.run_streaming(disclosure, session_history):
+                # Use the streaming agent with simplified event handling
+                final_response = ""
+                events_received = 0
+                async for event in agent_with_thoughts.run_streaming(disclosure, session_history):
                     event_type = event.get('type', 'unknown')
+                    events_received += 1
+                    print(f"🔍 Backend received event #{events_received}: {event_type} - {str(event)[:200]}...")  # Debug logging
+                    self._update_run_metrics(run_id, "event_streamed")
                     
-                    if event_type == 'intent_analysis':
-                        yield create_sse_event(StreamEventType.INTENT_ANALYSIS, {
-                            'text': event.get('message', 'Analyzing request...'),
-                            'user_input': event.get('user_input', disclosure[:100] + "...")
+                    # Ultra-simplified event handling - everything is either a thought or final result
+                    if event_type == 'low_confidence':
+                        # Treat low confidence as a special thought, not a separate event type
+                        self._update_run_metrics(run_id, "thought_generated")
+                        clarification_msg = f"❓ {event.get('text', 'I need more information to help you effectively.')}"
+                        yield create_sse_event(StreamEventType.THOUGHTS, {
+                            'content': clarification_msg,
+                            'event_type': 'low_confidence',  # Keep original type for debugging
+                            'metadata': {
+                                'confidence': event.get('confidence', 0.0),
+                                'suggestions': event.get('suggestions', [])
+                            }
                         })
-                        
-                    elif event_type == 'intent_classified':
-                        yield create_sse_event(StreamEventType.INTENT_CLASSIFIED, {
-                            'text': event.get('reasoning', 'Intent classified'),
-                            'intent_type': event.get('intent', 'unknown'),
-                            'confidence': event.get('confidence_score', 0.0)
-                        })
-                        
-                    elif event_type == 'low_confidence':
-                        yield create_sse_event(StreamEventType.ERROR, {
-                            'error': event.get('message', 'Low confidence - needs clarification'),
-                            'confidence': event.get('confidence', 0.0)
-                        })
-                        return
-                        
-                    elif event_type == 'claims_drafting_start':
-                        yield create_sse_event(StreamEventType.CLAIMS_DRAFTING_START, {
-                            'text': event.get('message', 'Starting claims drafting...'),
-                            'disclosure_length': event.get('disclosure_length', len(disclosure))
-                        })
-                        
-                    elif event_type == 'claims_progress':
-                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
-                            'text': event.get('message', 'Processing...'),
-                            'stage': event.get('stage', 'unknown')
-                        })
-                        
-                    elif event_type == 'claim_generated':
-                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
-                            'claim_number': event.get('claim_number', 0),
-                            'text': event.get('text', ''),
-                            'total_claims': event.get('total_claims', 0)
-                        })
-                        
-                    elif event_type == 'claims_complete':
-                        yield create_sse_event(StreamEventType.CLAIMS_COMPLETE, {
-                            'text': event.get('message', 'Claims complete'),
-                            'num_claims': event.get('num_claims', 0),
-                            'claims': event.get('claims', [])
-                        })
-                        
-                    elif event_type == 'prior_art_start':
-                        yield create_sse_event(StreamEventType.PRIOR_ART_START, {
-                            'text': event.get('message', 'Starting prior art search...')
-                        })
-                        
-                    elif event_type == 'prior_art_progress':
-                        yield create_sse_event(StreamEventType.PRIOR_ART_PROGRESS, {
-                            'text': event.get('message', 'Searching...'),
-                            'stage': event.get('stage', 'unknown')
-                        })
-                        
-                    elif event_type == 'prior_art_complete':
-                        yield create_sse_event(StreamEventType.PRIOR_ART_COMPLETE, {
-                            'text': event.get('message', 'Prior art search complete'),
-                            'results': event.get('results', ''),
-                            'patents_found': event.get('patents_found', 0)
-                        })
-                        
-                    elif event_type == 'review_start':
-                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
-                            'text': event.get('message', 'Starting review...'),
-                            'stage': 'review_start'
-                        })
-                        
-                    elif event_type == 'review_progress':
-                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
-                            'text': event.get('message', 'Reviewing...'),
-                            'stage': event.get('stage', 'unknown')
-                        })
-                        
-                    elif event_type == 'review_complete':
-                        yield create_sse_event(StreamEventType.CLAIMS_COMPLETE, {
-                            'text': event.get('message', 'Review complete'),
-                            'review_comments': event.get('review_comments', [])
-                        })
-                        
-                    elif event_type == 'processing':
-                        yield create_sse_event(StreamEventType.CLAIMS_PROGRESS, {
-                            'text': event.get('message', 'Processing...'),
-                            'stage': 'processing'
-                        })
+                        # Don't return - continue processing, this isn't a terminal event
                         
                     elif event_type == 'complete':
-                        # Final completion
+                        # Final completion with results
+                        final_response = event.get('response', 'Process completed')
+                        print(f"🎯 Emitting RESULTS event with response: {final_response[:100]}...")  # Debug logging
+                        
                         final_data = {
-                            "response": event.get('response', 'Process completed'),
-                            "metadata": {
-                                "should_draft_claims": event_type in ['claims_complete', 'claim_generated'],
-                                "has_claims": event_type == 'claims_complete',
-                                "reasoning": event.get('message', 'Process completed')
+                            "response": final_response,
+                            "metadata": event.get('metadata', {}),
+                            "data": event.get('data', {}),
+                            "performance": {
+                                "events_streamed": self._runs[run_id]["metrics"]["events_streamed"],
+                                "thoughts_generated": self._runs[run_id]["metrics"]["thoughts_generated"]
                             }
                         }
                         
-                        if event_type == 'claims_complete' and event.get('claims'):
-                            final_data["data"] = {
-                                "claims": event.get('claims', []),
-                                "num_claims": event.get('num_claims', 0)
-                            }
-                        
                         self._runs[run_id]["status"] = "completed"
-                        self._add_to_session_history(run_data["session_id"], disclosure, final_data["response"])
+                        self._update_run_metrics(run_id, "end_time")
+                        
+                        # Add to session history
+                        self._add_to_session_history(run_data["session_id"], disclosure, final_response)
                         print(f"💾 Updated session history for session {run_data['session_id']}")
                         
-                        yield create_sse_event(StreamEventType.COMPLETE, final_data)
+                        yield create_sse_event(StreamEventType.RESULTS, final_data)
+                        return  # Important: stop processing after completion
                         
                     elif event_type == 'error':
+                        # Handle errors from agent
+                        error_msg = event.get('error', 'Unknown error')
+                        print(f"❌ Agent error: {error_msg}")
                         yield create_sse_event(StreamEventType.ERROR, {
-                            'error': event.get('error', 'Unknown error'),
-                            'message': event.get('message', 'Error occurred')
+                            'error': error_msg,
+                            'context': 'agent_error',
+                            'text': event.get('text', f'Error: {error_msg}')
                         })
                         return
+                        
+                    else:
+                        # Everything else is a "thought" - reasoning, progress, analysis, etc.
+                        self._update_run_metrics(run_id, "thought_generated")
+                        
+                        # Extract and clean meaningful content from any event type
+                        raw_content = (
+                            event.get('content') or 
+                            event.get('text') or 
+                            event.get('message') or
+                            event.get('reasoning') or  # For intent_classified events
+                            ""
+                        )
+                        
+                        # Clean up verbose content for better UX
+                        if raw_content and raw_content.strip():
+                            # For very long reasoning text, provide a summary instead
+                            if len(raw_content) > 200:
+                                # Extract the key insight from verbose reasoning
+                                if "intent" in event_type.lower() and "classification" in raw_content.lower():
+                                    thought_content = f"Analyzing request intent for {event.get('intent', 'unknown')} classification..."
+                                elif "claim" in event_type.lower():
+                                    thought_content = "Analyzing patent claim requirements and structure..."
+                                elif "analysis" in event_type.lower():
+                                    thought_content = "Performing technical analysis of the invention..."
+                                else:
+                                    # Take first meaningful sentence
+                                    sentences = raw_content.split('.')
+                                    thought_content = sentences[0][:150] + "..." if sentences[0] else f"Processing {event_type}..."
+                            else:
+                                thought_content = raw_content
+                            
+                            yield create_sse_event(StreamEventType.THOUGHTS, {
+                                'content': thought_content,
+                                'event_type': event_type,  # Keep original type for debugging
+                                'metadata': event.get('metadata', {})
+                            })
+                
+                # Fallback: If we reach here without a complete event, send a default response
+                if events_received > 0:
+                    print(f"⚠️ No complete event received after {events_received} events, sending fallback response")
+                    fallback_response = {
+                        "response": "I've analyzed your request. Please let me know if you need any clarification or have additional questions.",
+                        "metadata": {
+                            "should_draft_claims": False,
+                            "has_claims": False,
+                            "reasoning": "Partial processing completed"
+                        },
+                        "performance": {
+                            "events_streamed": self._runs[run_id]["metrics"]["events_streamed"],
+                            "thoughts_generated": self._runs[run_id]["metrics"]["thoughts_generated"]
+                        }
+                    }
+                    self._runs[run_id]["status"] = "completed"
+                    self._update_run_metrics(run_id, "end_time")
+                    yield create_sse_event(StreamEventType.RESULTS, fallback_response)
                 
             except Exception as e:
                 print(f"❌ Agent execution failed: {e}")
                 fallback_response = {
                     "response": "I encountered an issue processing your request. Please try again or provide more details about your invention.",
-                    "metadata": {"error": str(e), "should_draft_claims": False, "has_claims": False}
+                    "metadata": {"error": str(e), "should_draft_claims": False, "has_claims": False},
+                    "performance": {
+                        "events_streamed": self._runs[run_id]["metrics"]["events_streamed"],
+                        "thoughts_generated": self._runs[run_id]["metrics"]["thoughts_generated"]
+                    }
                 }
                 self._runs[run_id]["status"] = "error"
                 self._runs[run_id]["error"] = str(e)
-                yield create_sse_event(StreamEventType.ERROR, {'error': str(e)})
-                yield create_sse_event(StreamEventType.COMPLETE, fallback_response)
+                yield create_sse_event(StreamEventType.ERROR, {'error': str(e), 'context': 'agent_execution'})
+                yield create_sse_event(StreamEventType.RESULTS, fallback_response)
                 
         except Exception as e:
             print(f"❌ Stream execution failed: {e}")
-            yield create_sse_event(StreamEventType.ERROR, {'error': str(e)})
-            yield create_sse_event(StreamEventType.COMPLETE, {})
-
+            yield create_sse_event(StreamEventType.ERROR, {'error': str(e), 'context': 'stream_execution'})
 
 class ConversationTurn(BaseModel):
     role: str
     content: str
     timestamp: Optional[str] = None
 
-
 class DocumentContentModel(BaseModel):
     text: str
     paragraphs: Optional[List[str]] = None
     selection: Optional[dict] = None
-
 
 class RunRequest(BaseModel):
     user_message: Optional[str] = None
@@ -346,155 +354,25 @@ class RunRequest(BaseModel):
     document_content: Optional[DocumentContentModel] = None
     disclosure: Optional[str] = None  # legacy
     session_id: Optional[str] = None
+    enable_thoughts: Optional[bool] = True  # NEW: Option to enable/disable thought streaming
 
-    def _add_to_session_history(self, session_id: str, user_input: str, agent_response: str):
-        """Add conversation to session-level history"""
-        if session_id in self._session_history:
-            conversation_entry = f"User: {user_input}\nAgent: {agent_response}\n---\n"
-            self._session_history[session_id] += conversation_entry
-        else:
-            # Initialize session history if it doesn't exist
-            self._session_history[session_id] = f"User: {user_input}\nAgent: {agent_response}\n---\n"
-
-    def _get_session_history(self, session_id: str) -> str:
-        """Get the complete session history for context building"""
-        history = self._session_history.get(session_id, "")
-        if history:
-            # Truncate very long histories to prevent context overflow
-            max_length = 8000  # Reasonable limit for LLM context
-            if len(history) > max_length:
-                # Keep the most recent conversations (last 8000 chars)
-                history = "..." + history[-max_length:]
-                print(f"⚠️  Session history truncated for session {session_id} (was {len(self._session_history[session_id])} chars)")
-        return history
-
-    async def get_run_details(self, run_id: str) -> Dict[str, Any]:
-        """Get run details"""
-        if run_id not in self._runs:
-            raise HTTPException(status_code=404, detail="Run not found")
-        
-        return self._runs[run_id]
-
-    async def stream_run(self, run_id: str):
-        """Stream patent drafting run"""
-        try:
-            if run_id not in self._runs:
-                yield f"event: error\ndata: {json.dumps({'error': 'Run not found'})}\n\n"
-                yield "event: done\ndata: {}\n\n"
-                return
-            
-            run_data = self._runs[run_id]
-            disclosure = run_data["disclosure"]
-            
-            # Update status
-            self._runs[run_id]["status"] = "processing"
-            
-            yield f"event: status\ndata: {json.dumps({'status': 'processing', 'message': 'Analyzing your request...'})}\n\n"
-            await asyncio.sleep(1)
-            
-            # Use the agent with session history context
-            try:
-                # Get session history for context building BEFORE calling agent
-                session_history = self._get_session_history(run_data["session_id"])
-                
-                # Log session context for debugging
-                if session_history:
-                    print(f"🔍 Using session context ({len(session_history)} chars) for run {run_id}")
-                else:
-                    print(f"🆕 No session context available for run {run_id}")
-                
-                # Pass session history to agent
-                agent_response = await agent.run(disclosure, session_history)
-                
-                # Stream reasoning
-                yield f"event: reasoning\ndata: {json.dumps({'text': agent_response.reasoning})}\n\n"
-                await asyncio.sleep(1)
-                
-                # Add search progress events for prior art requests
-                if "prior art" in agent_response.reasoning.lower() or "search" in agent_response.reasoning.lower():
-                    yield f"event: search_progress\ndata: {json.dumps({'step': 'searching', 'message': 'Searching patent databases...'})}\n\n"
-                    await asyncio.sleep(0.5)
-                    yield f"event: search_progress\ndata: {json.dumps({'step': 'analyzing', 'message': 'Analyzing search results...'})}\n\n"
-                    await asyncio.sleep(0.5)
-                
-                # Add report drafting progress events
-                if "report" in agent_response.reasoning.lower() or "analysis" in agent_response.reasoning.lower():
-                    yield f"event: report_progress\ndata: {json.dumps({'step': 'structuring', 'message': 'Structuring the report...'})}\n\n"
-                    await asyncio.sleep(0.5)
-                    yield f"event: report_progress\ndata: {json.dumps({'step': 'formatting', 'message': 'Formatting content...'})}\n\n"
-                    await asyncio.sleep(0.5)
-                
-                if agent_response.should_draft_claims:
-                    yield f"event: tool_call\ndata: {json.dumps({'tool': 'draft_claims', 'num_claims': len(agent_response.claims or [])})}\n\n"
-                    await asyncio.sleep(1)
-                    
-                    yield f"event: tool_result\ndata: {json.dumps({'tool': 'draft_claims', 'success': True, 'claims_generated': len(agent_response.claims or [])})}\n\n"
-                    await asyncio.sleep(1)
-                
-                # Prepare final response
-                final_data = {
-                    "response": agent_response.conversation_response,
-                    "metadata": {
-                        "should_draft_claims": agent_response.should_draft_claims,
-                        "has_claims": bool(agent_response.claims),
-                        "reasoning": agent_response.reasoning
-                    }
-                }
-                
-                if agent_response.claims:
-                    final_data["data"] = {
-                        "claims": agent_response.claims,
-                        "num_claims": len(agent_response.claims)
-                    }
-                
-                # Update run status first
-                self._runs[run_id]["status"] = "completed"
-                self._runs[run_id]["result"] = agent_response
-                
-                # Store conversation in session history AFTER successful completion
-                self._add_to_session_history(run_data["session_id"], disclosure, agent_response.conversation_response)
-                print(f"💾 Updated session history for session {run_data['session_id']}")
-                
-                yield f"event: results\ndata: {json.dumps(final_data)}\n\n"
-                await asyncio.sleep(0.5)
-                yield "event: done\ndata: {}\n\n"
-                
-            except Exception as e:
-                print(f"❌ Agent execution failed: {e}")
-                
-                fallback_response = {
-                    "response": "I encountered an issue processing your request. Please try again or provide more details about your invention.",
-                    "metadata": {
-                        "error": str(e),
-                        "should_draft_claims": False,
-                        "has_claims": False
-                    }
-                }
-                
-                self._runs[run_id]["status"] = "error"
-                self._runs[run_id]["error"] = str(e)
-                
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-                yield f"event: results\ndata: {json.dumps(fallback_response)}\n\n"
-                yield "event: done\ndata: {}\n\n"
-                
-        except Exception as e:
-            print(f"❌ Stream execution failed: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-            yield "event: done\ndata: {}\n\n"
-
-# Initialize service
-service = SimplePatentService()
+# Initialize enhanced service
+service = EnhancedPatentService()
 
 @app.post("/api/patent/run", tags=["Patent Drafting"])
 async def start_run(request: RunRequest):
     """
-    Start a new patent drafting run.
+    Start a new simplified patent drafting run.
     
-    Initiates a new patent drafting session or continues an existing one.
-    This endpoint accepts user input and document content to generate patent claims
-    and professional responses using AI.
+    Initiates a new patent drafting session with clean, simplified streaming
+    that's easy to integrate and debug.
     
+    ### Simplified Features:
+    - **Clean Events**: Just 4 event types instead of 18+
+    - **Better UX**: Clear separation of thoughts vs results
+    - **Easy Integration**: No complex event mapping needed
+    
+    ### Request Body:
     - **user_message**: Natural language description of the invention
     - **document_content**: Optional Word document content for context
     - **conversation_history**: Previous messages for context
@@ -503,7 +381,6 @@ async def start_run(request: RunRequest):
     Returns a unique run_id for streaming the response.
     """
     try:
-        # Prefer user_message if provided, otherwise fall back to legacy disclosure
         disclosure = request.user_message or request.disclosure or ""
         session_id = request.session_id
         
@@ -511,29 +388,37 @@ async def start_run(request: RunRequest):
             raise HTTPException(status_code=400, detail="Disclosure or user_message is required")
         
         result = await service.start_run(disclosure, session_id)
-        # store raw request for traceability
+        
+        # Store enhanced request metadata
         try:
-            service._runs[result["run_id"]]["raw_request"] = request.dict()
+            service._runs[result["run_id"]]["raw_request"] = {
+                **request.dict(),
+                "enable_thoughts": request.enable_thoughts
+            }
         except Exception:
             pass
-        return result
+            
+        return {
+            **result,
+            "features": {
+                "thoughts_enabled": request.enable_thoughts,
+                "enhanced_streaming": True,
+                "performance_tracking": True
+            }
+        }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error starting run: {e}")
+        print(f"❌ Error starting enhanced run: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# Prior art endpoint removed - now handled through streaming pipeline
-# All requests (prior art + claims) go through /api/patent/run + /api/patent/stream
 
 @app.get("/api/patent/run/{run_id}", tags=["Patent Drafting"])
 async def get_run_details(run_id: str):
     """
-    Get detailed information about a patent drafting run.
+    Get detailed information about a patent drafting run with enhanced metrics.
     
-    Retrieves the complete run information including status, results,
-    and any generated patent claims.
+    Retrieves complete run information including status, results, performance
+    metrics, and LLM decision thought statistics.
     """
     try:
         return await service.get_run_details(run_id)
@@ -544,22 +429,46 @@ async def get_run_details(run_id: str):
 @app.get("/api/patent/stream", tags=["Patent Drafting"])
 async def stream_run(run_id: str):
     """
-    Stream patent drafting results in real-time.
+    Stream simplified patent drafting results.
     
-    Uses Server-Sent Events (SSE) to provide live updates as the AI
-    processes the patent drafting request. Events include status updates,
-    reasoning, tool calls, and final results.
+    Uses Server-Sent Events (SSE) with a clean, simple architecture:
+    - AI thoughts and reasoning in real-time
+    - Clear final results with structured data
+    - Simple error handling and recovery
     
-    Event types: thoughts, results, done, error
+    ### Simplified Event Types:
+    - **thoughts**: All AI thinking, reasoning, progress updates
+    - **results**: Final completion with structured data
+    - **error**: Error states with helpful context
+    - **low_confidence**: When AI needs clarification
+    
+    ### Usage:
+    ```javascript
+    const eventSource = new EventSource('/api/patent/stream?run_id=' + runId);
+    
+    eventSource.addEventListener('thoughts', (event) => {
+        const thoughtData = JSON.parse(event.data);
+        console.log('AI Thinking:', thoughtData.content);
+    });
+    
+    eventSource.addEventListener('results', (event) => {
+        const result = JSON.parse(event.data);
+        console.log('Final Result:', result.response);
+        // result.data contains claims, metadata, etc.
+    });
+    ```
     """
     async def event_generator():
         try:
             async for event in service.stream_run(run_id):
                 yield event
         except Exception as e:
-            print(f"❌ Stream error: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-            yield "event: done\ndata: {}\n\n"
+            print(f"❌ Enhanced stream error: {e}")
+            yield create_sse_event(StreamEventType.ERROR, {
+                'error': str(e), 
+                'context': 'event_generator',
+                'timestamp': datetime.now().isoformat()
+            })
     
     return StreamingResponse(
         event_generator(),
@@ -568,18 +477,15 @@ async def stream_run(run_id: str):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*"
+            "Access-Control-Allow-Headers": "*",
+            "X-Enhanced-Streaming": "true",
+            "X-Thoughts-Enabled": "true"
         }
     )
 
 @app.get("/api/debug/env", tags=["Debug"])
 async def debug_env():
-    """
-    Check environment variables status.
-    
-    ⚠️ Development only - returns masked environment variables
-    for system diagnostics. Sensitive values are masked for security.
-    """
+    """Check environment variables status with enhanced diagnostics."""
     def mask(val: str):
         if not val:
             return None
@@ -592,73 +498,144 @@ async def debug_env():
         "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION"),
         "AZURE_OPENAI_DEPLOYMENT_NAME": os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
         "AZURE_OPENAI_API_KEY": mask(os.getenv("AZURE_OPENAI_API_KEY")),
-        "agent_type": "simple_v1"
+        "agent_type": "enhanced_with_thoughts_v2",
+        "features": {
+            "streaming_thoughts": True,
+            "enhanced_events": True,
+            "performance_tracking": True,
+            "better_error_handling": True
+        }
     }
 
 @app.get("/api/sessions", tags=["Session Management"])
 async def list_sessions():
-    """
-    List all active conversation sessions.
-    
-    Returns summary information about all sessions including
-    start time, topic, and number of runs.
-    """
+    """List all active conversation sessions with enhanced metrics."""
     try:
         sessions = []
         for session_id, session_data in service._sessions.items():
+            # Calculate session metrics
+            total_thoughts = sum(
+                service._runs.get(run_id, {}).get("metrics", {}).get("thoughts_generated", 0)
+                for run_id in session_data["runs"]
+            )
+            
             sessions.append({
                 "session_id": session_id,
                 "started_at": session_data["started_at"],
                 "topic": session_data["topic"],
                 "total_runs": len(session_data["runs"]),
-                "last_run": session_data["runs"][-1] if session_data["runs"] else None
+                "last_run": session_data["runs"][-1] if session_data["runs"] else None,
+                "total_thoughts_generated": total_thoughts
             })
         
         return {
             "total_sessions": len(sessions),
-            "sessions": sessions
+            "sessions": sessions,
+            "enhanced_features": True
         }
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/api/debug/session/{session_id}", tags=["Debug"])
-async def debug_session(session_id: str):
-    """
-    Get detailed session debug information.
-    
-    ⚠️ Development only - provides full session history and metadata
-    for debugging purposes. Should not be exposed in production.
-    """
+@app.get("/api/debug/performance", tags=["Debug"])
+async def get_performance_metrics():
+    """Get system performance metrics and statistics."""
     try:
-        if session_id not in service._sessions:
-            return {"error": "Session not found"}
+        total_runs = len(service._runs)
+        completed_runs = len([r for r in service._runs.values() if r["status"] == "completed"])
+        total_thoughts = sum(
+            run.get("metrics", {}).get("thoughts_generated", 0) 
+            for run in service._runs.values()
+        )
         
-        session_data = service._sessions[session_id]
-        session_history = service._get_session_history(session_id)
+        avg_duration = 0
+        if completed_runs > 0:
+            durations = [
+                run.get("metrics", {}).get("duration_seconds", 0)
+                for run in service._runs.values()
+                if run["status"] == "completed" and run.get("metrics", {}).get("duration_seconds")
+            ]
+            if durations:
+                avg_duration = sum(durations) / len(durations)
         
         return {
-            "session_id": session_id,
-            "started_at": session_data["started_at"],
-            "topic": session_data["topic"],
-            "runs": session_data["runs"],
-            "session_history": session_history,
-            "history_length": len(session_history),
-            "history_preview": session_history[:200] + "..." if len(session_history) > 200 else session_history
+            "total_runs": total_runs,
+            "completed_runs": completed_runs,
+            "error_runs": len([r for r in service._runs.values() if r["status"] == "error"]),
+            "total_sessions": len(service._sessions),
+            "total_thoughts_generated": total_thoughts,
+            "avg_completion_time_seconds": round(avg_duration, 2),
+            "avg_thoughts_per_run": round(total_thoughts / max(total_runs, 1), 1)
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/api/prior-art/search", tags=["Prior Art Search"])
+async def search_prior_art(query: str, max_results: int = 20):
+    """
+    Perform prior art search using the PatentSearchEngine.
+    
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return (default: 20)
+    
+    Returns:
+        Prior art search results with patent information
+    """
+    try:
+        from .prior_art_search import PatentSearchEngine, PatentSearchConfig
+        
+        # Create search configuration
+        config = PatentSearchConfig()
+        config.default_max_results = max_results
+        
+        # Initialize search engine
+        search_engine = PatentSearchEngine(config)
+        
+        # Perform search using the correct method
+        search_result = await search_engine.search(
+            query=query,
+            max_results=max_results
+        )
+        
+        return {
+            "query": query,
+            "total_results": len(search_result.patents) if hasattr(search_result, 'patents') else 0,
+            "results": search_result.patents if hasattr(search_result, 'patents') else [],
+            "status": "success",
+            "search_result": search_result
+        }
+        
+    except Exception as e:
+        print(f"❌ Prior art search failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Prior art search failed: {str(e)}"
+        )
 
 @app.get("/", tags=["System"])
 async def root():
     """
-    API health check and service information.
+    Enhanced API health check and service information.
     
-    Returns basic service information and operational status.
-    Use this endpoint to verify the API is running and accessible.
+    Returns comprehensive service information including new features
+    and capabilities for LLM decision thought streaming.
     """
     return {
-        "service": "Simple Patent Drafting Service",
-        "version": "1.0",
-        "functions": ["draft_claims", "general_conversation"],
+        "service": "Enhanced Patent Drafting Service with LLM Thoughts",
+        "version": "2.0",
+        "features": [
+            "draft_claims", 
+            "general_conversation", 
+            "prior_art_search",
+            "llm_decision_thoughts",
+            "enhanced_streaming", 
+            "performance_tracking"
+        ],
+        "new_capabilities": {
+            "thought_streaming": "Real-time LLM decision thoughts",
+            "enhanced_events": "More granular streaming events",
+            "performance_metrics": "Built-in timing and statistics",
+            "better_errors": "Detailed error context and recovery"
+        },
         "status": "operational"
     }

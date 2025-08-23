@@ -65,7 +65,7 @@ export interface PriorArtResponse {
 }
 
 export interface StreamEvent {
-  event: 'status' | 'reasoning' | 'tool_call' | 'tool_result' | 'final' | 'done';
+  event: 'thoughts' | 'results' | 'done' | 'error';
   data: any;
 }
 
@@ -182,6 +182,7 @@ class ApiService {
       let buffer = '';
       const decoder = new TextDecoder();
       let finalResponse: ChatResponse | null = null;
+      let currentEventType = '';
 
       while (true) {
         if (signal?.aborted) {
@@ -196,7 +197,11 @@ class ApiService {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith('event: ')) {
+            // Track the current event type
+            currentEventType = line.slice(7).trim();
+            console.log('SSE Event:', currentEventType);
+          } else if (line.startsWith('data: ')) {
             const content = line.slice(6); // Remove 'data: ' prefix
             
             if (content === '{}') {
@@ -211,8 +216,13 @@ class ApiService {
             try {
               const parsed = JSON.parse(content);
               
-              if (parsed.response) {
-                // Final event with complete response
+              // Handle different event types for real-time streaming
+              console.log(`🔍 Processing event: ${currentEventType}`, { parsed, currentEventType });
+              
+              // ✅ Simplified - just 2 types: thoughts and results!
+              if (currentEventType === 'results') {
+                // Final results with complete content
+                console.log('🎯 Processing results event:', parsed);
                 finalResponse = {
                   response: parsed.response,
                   metadata: parsed.metadata || {
@@ -224,9 +234,27 @@ class ApiService {
                   session_id: runResponse.session_id
                 };
                 
-                // Stream the response incrementally
-                const responseText = parsed.response;
-                onChunk(responseText);
+                // Log the actual metadata from backend for debugging
+                console.log('🔍 Backend metadata received:', parsed.metadata);
+                console.log('🔍 Final response structure:', finalResponse);
+                
+                // Stream the final results content
+                onChunk(parsed.response);
+              } else if (currentEventType === 'error') {
+                // Handle errors
+                console.log('❌ Processing error event:', parsed);
+                onChunk(`❌ Error: ${parsed.error || 'Unknown error occurred'}`);
+              } else {
+                // Everything else is a "thought" - reasoning, progress, etc.
+                console.log(`💭 Processing thought event (${currentEventType}):`, parsed);
+                
+                // Extract text from different data structures
+                const thoughtText = parsed.text || 
+                                   parsed.message || 
+                                   (parsed.tool ? `Tool: ${parsed.tool}` : '') ||
+                                   'Processing...';
+                
+                onChunk(thoughtText);
               }
             } catch (e) {
               console.warn('Failed to parse streaming data:', e);

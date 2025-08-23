@@ -10,9 +10,30 @@ from pydantic import BaseModel
 from enum import Enum
 
 from .models import AgentResponse, ReviewComment
+from .prior_art_search import PatentSearchEngine, PatentSearchConfig
 
 # Load environment variables
 load_dotenv()
+
+class ThoughtType(str, Enum):
+    """Types of LLM decision thoughts"""
+    ANALYZING_INPUT = "analyzing_input"
+    EVALUATING_INTENT = "evaluating_intent" 
+    PLANNING_APPROACH = "planning_approach"
+    SELECTING_STRATEGY = "selecting_strategy"
+    PROCESSING_CONTEXT = "processing_context"
+    GENERATING_CONTENT = "generating_content"
+    VALIDATING_OUTPUT = "validating_output"
+    MAKING_DECISION = "making_decision"
+    REASONING = "reasoning"
+
+class StreamingThought(BaseModel):
+    """Structure for streaming LLM thoughts"""
+    type: ThoughtType
+    content: str
+    confidence: Optional[float] = None
+    metadata: Dict[str, Any] = {}
+    timestamp: Optional[str] = None
 
 class IntentType(str, Enum):
     """Types of user intent the agent can recognize"""
@@ -24,12 +45,6 @@ class IntentType(str, Enum):
     GENERAL_CONVERSATION = "general_conversation"
     PRIOR_ART_SEARCH = "prior_art_search"
 
-class FunctionCall(BaseModel):
-    """Represents a function call from the LLM"""
-    name: str
-    arguments: Dict[str, Any]
-    reasoning: str
-
 class IntentClassification(BaseModel):
     """Result of intent classification"""
     intent: IntentType
@@ -39,14 +54,14 @@ class IntentClassification(BaseModel):
     requires_context: bool
 
 def get_azure_config():
-    """Get Azure OpenAI configuration"""
+    """Get Azure OpenAI configuration with validation"""
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
     deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
     api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
     
     if not endpoint or not api_key or not deployment_name:
-        raise RuntimeError(f"Missing Azure OpenAI config: endpoint={endpoint}, deployment={deployment_name}, api_key={'set' if api_key else 'missing'}")
+        raise RuntimeError(f"Missing Azure OpenAI config: endpoint={bool(endpoint)}, deployment={bool(deployment_name)}, api_key={bool(api_key)}")
     
     return {
         "endpoint": endpoint.rstrip("/"),
@@ -55,8 +70,13 @@ def get_azure_config():
         "api_version": api_version
     }
 
-def send_llm_request_with_functions(messages: List[Dict], functions: Optional[List[Dict]] = None, max_tokens: int = 4000) -> Dict:
-    """Send request to Azure OpenAI with function calling support"""
+async def send_llm_request_streaming(
+    messages: List[Dict], 
+    functions: Optional[List[Dict]] = None, 
+    max_tokens: int = 4000,
+    thought_callback: Optional[callable] = None
+) -> AsyncGenerator[Dict, None]:
+    """Send streaming request to Azure OpenAI with thought extraction"""
     config = get_azure_config()
     url = f"{config['endpoint']}/openai/deployments/{config['deployment_name']}/chat/completions?api-version={config['api_version']}"
     
@@ -68,118 +88,323 @@ def send_llm_request_with_functions(messages: List[Dict], functions: Optional[Li
     payload = {
         "messages": messages,
         "max_completion_tokens": max_tokens,
-        "temperature": 0.1
+        "temperature": 0.0,  # More deterministic, less verbose
+        "stream": True  # Enable streaming
     }
     
     if functions:
         payload["tools"] = functions
         payload["tool_choice"] = "auto"
     
-    with httpx.Client(timeout=60) as client:
-        response = client.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json()
-
-def send_llm_request(messages: List[Dict], max_tokens: int = 4000) -> str:
-    """Send simple request to Azure OpenAI"""
-    config = get_azure_config()
-    url = f"{config['endpoint']}/openai/deployments/{config['deployment_name']}/chat/completions?api-version={config['api_version']}"
-    
-    headers = {
-        "Content-Type": "application/json",
-        "api-key": config['api_key']
-    }
-    
-    payload = {
-        "messages": messages,
-        "max_completion_tokens": max_tokens,
-        "temperature": 0.1
-    }
-    
-    with httpx.Client(timeout=60) as client:
-        response = client.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        result = response.json()
-        return result['choices'][0]['message']['content']
-
-async def classify_user_intent(user_input: str, conversation_context: str = "") -> IntentClassification:
-    """Use LLM to classify user intent with confidence scores"""
-    try:
-        # Log context usage for debugging
-        if conversation_context:
-            logging.info(f"Using conversation context ({len(conversation_context)} chars) for intent classification")
-        else:
-            logging.info("No conversation context available for intent classification")
+    async with httpx.AsyncClient(timeout=60) as client:
+        async with client.stream("POST", url, headers=headers, json=payload) as response:
+            response.raise_for_status()
             
-        prompt = f"""
-        You are an expert patent attorney AI assistant. Analyze this user input and classify their intent.
+            content_buffer = ""
+            function_call_buffer = ""
+            
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data_str = line[6:]  # Remove "data: " prefix
+                    
+                    if data_str.strip() == "[DONE]":
+                        break
+                    
+                    try:
+                        data = json.loads(data_str)
+                        
+                        if "choices" in data and len(data["choices"]) > 0:
+                            choice = data["choices"][0]
+                            delta = choice.get("delta", {})
+                            
+                            # Handle content streaming
+                            if "content" in delta and delta["content"]:
+                                chunk = delta["content"]
+                                content_buffer += chunk
+                                
+                                # Extract thoughts from the streaming content
+                                if thought_callback:
+                                    thoughts = await extract_thoughts_from_chunk(chunk, content_buffer)
+                                    for thought in thoughts:
+                                        await thought_callback(thought)
+                                
+                                yield {
+                                    "type": "content_chunk",
+                                    "content": chunk,
+                                    "full_content": content_buffer
+                                }
+                            
+                            # Handle function calls
+                            if "tool_calls" in delta:
+                                for tool_call in delta["tool_calls"]:
+                                    if "function" in tool_call:
+                                        func = tool_call["function"]
+                                        if "name" in func:
+                                            yield {
+                                                "type": "function_call",
+                                                "function_name": func["name"]
+                                            }
+                                        if "arguments" in func:
+                                            function_call_buffer += func["arguments"]
+                                            
+                            # Check for completion
+                            if choice.get("finish_reason"):
+                                yield {
+                                    "type": "completion",
+                                    "finish_reason": choice["finish_reason"],
+                                    "full_content": content_buffer,
+                                    "function_arguments": function_call_buffer
+                                }
+                                break
+                                
+                    except json.JSONDecodeError:
+                        continue
 
-        User Input: {user_input}
+async def extract_thoughts_from_chunk(chunk: str, full_content: str) -> List[StreamingThought]:
+    """Extract LLM decision thoughts from streaming content"""
+    thoughts = []
+    
+    # Look for decision markers in the content
+    decision_patterns = [
+        (r"I need to|I should|Let me", ThoughtType.ANALYZING_INPUT),
+        (r"This appears to be|This seems like|I can see", ThoughtType.EVALUATING_INTENT),
+        (r"My approach will be|I'll start by|The best strategy", ThoughtType.PLANNING_APPROACH),
+        (r"I'm choosing|I'll select|The optimal choice", ThoughtType.SELECTING_STRATEGY),
+        (r"Based on the context|Considering the history|Given the information", ThoughtType.PROCESSING_CONTEXT),
+        (r"I'm generating|Creating|Drafting", ThoughtType.GENERATING_CONTENT),
+        (r"Let me verify|I need to check|Validating", ThoughtType.VALIDATING_OUTPUT),
+        (r"Therefore|Because|Since|As a result", ThoughtType.REASONING),
+        (r"I've decided|My decision is|I conclude", ThoughtType.MAKING_DECISION)
+    ]
+    
+    for pattern, thought_type in decision_patterns:
+        if re.search(pattern, chunk, re.IGNORECASE):
+            thoughts.append(StreamingThought(
+                type=thought_type,
+                content=chunk.strip(),
+                metadata={"pattern_matched": pattern}
+            ))
+            break
+    
+    return thoughts
+
+async def classify_user_intent_streaming(user_input: str, conversation_context: str = "") -> AsyncGenerator[Dict, None]:
+    """Stream the intent classification process with thoughts"""
+    
+    prompt = f"""
+    You are an expert patent attorney AI assistant. Analyze the user input and immediately classify their intent using the classify_user_intent function.
+
+    User Input: {user_input}
+    
+    Session History:
+    {conversation_context if conversation_context else "No previous conversation in this session"}
+
+    Available intent types:
+    1. claim_drafting - User wants patent claims drafted
+    2. claim_review - User wants existing claims reviewed  
+    3. patent_guidance - User needs general patent advice
+    4. invention_analysis - User wants invention analyzed
+    5. prior_art_search - User wants prior art search
+    6. technical_query - User has technical questions
+    7. general_conversation - General chat or greetings
+
+    Analyze the input quickly and call the classify_user_intent function immediately with your classification.
+    """
+
+    messages = [
+        {"role": "system", "content": "You are an expert patent attorney AI assistant. Analyze user input quickly and call the classify_user_intent function immediately. Avoid lengthy explanations."},
+        {"role": "user", "content": prompt}
+    ]
+    
+    functions = get_intent_classification_functions()
+    
+    try:
+        final_content = ""
+        function_result = None
+        reasoning_chunk_count = 0
+        max_reasoning_chunks = 50  # Limit verbose reasoning
         
-        Session History:
-        {conversation_context if conversation_context else "No previous conversation in this session"}
-
-        Available intent types:
-        1. claim_drafting - User wants patent claims drafted (e.g., "draft claims", "create a claim", "write patent claims")
-        2. claim_review - User wants existing claims reviewed (e.g., "review my claims", "check this claim", "validate claims", "review those claims")
-        3. patent_guidance - User needs general patent advice (e.g., "how to patent", "patent process", "patent strategy")
-        4. invention_analysis - User wants invention analyzed (e.g., "analyze my invention", "is this patentable", "evaluate invention")
-        5. technical_query - User has technical questions (e.g., "how does this work", "technical details", "implementation")
-        6. general_conversation - General chat or greetings (e.g., "hi", "hello", "thanks")
-
-        IMPORTANT CONFIDENCE GUIDELINES:
-        - For CLEAR, SPECIFIC requests: Use confidence 0.8-1.0
-        - For MODERATELY CLEAR requests: Use confidence 0.7-0.8
-        - For VAGUE or AMBIGUOUS requests: Use confidence 0.3-0.6
-        - For INCOMPLETE thoughts (ending with "...", "maybe", "I don't know"): Use confidence 0.2-0.5
-        - For UNCLEAR requests that need clarification: Use confidence 0.1-0.6
-
-        REDUCE CONFIDENCE for:
-        - Incomplete sentences ending with "..."
-        - Vague language like "maybe", "something about", "I don't know"
-        - Ambiguous requests that could mean multiple things
-        - Requests that need more context or details
-
-        Consider:
-        - Explicit keywords in the user's request
-        - Technical complexity of the input
-        - Whether they're asking for specific actions
-        - Context from previous conversation in this session
-        - Professional patent terminology
-        - References to previous claims or responses (e.g., "review those claims", "check my claims")
-        - AMBIGUITY and CLARITY of the request
-
-        Use the classify_user_intent function to provide your analysis.
-        """
-
-        messages = [
-            {"role": "system", "content": "You are an expert patent attorney AI assistant. PRIORITIZE the user's latest explicit instruction (user_input) over conversation history. If the user_input contains action verbs like 'draft', 'write', 'generate', 'create', or 'system claims', return intent 'claim_drafting'. Always output JSON with fields: intent, confidence_score, reasoning, trigger_text, suggested_actions, requires_context."},
-            {"role": "user", "content": prompt}
-        ]
+        async for chunk in send_llm_request_streaming(messages, functions, thought_callback=None):
+            if chunk["type"] == "content_chunk":
+                # Limit the number of reasoning chunks to prevent infinite streaming
+                reasoning_chunk_count += 1
+                if reasoning_chunk_count <= max_reasoning_chunks:
+                    # Stream the LLM's reasoning
+                    yield {
+                        "type": "reasoning_chunk",
+                        "content": chunk["content"]
+                    }
+                else:
+                    # Skip further reasoning chunks
+                    continue
+            elif chunk["type"] == "function_call":
+                # COMMENTED OUT: Technical function call notifications (not needed for users)
+                # yield {
+                #     "type": "thought",
+                #     "thought_type": ThoughtType.MAKING_DECISION.value,
+                #     "content": f"Calling function: {chunk['function_name']}"
+                # }
+                pass
+            elif chunk["type"] == "completion":
+                final_content = chunk["full_content"]
+                if chunk["function_arguments"]:
+                    function_result = json.loads(chunk["function_arguments"])
         
-        functions = get_intent_classification_functions()
-        response = send_llm_request_with_functions(messages, functions)
+        if function_result:
+            intent_classification = IntentClassification(
+                intent=IntentType(function_result['intent']),
+                confidence_score=float(function_result['confidence_score']),
+                reasoning=function_result['reasoning'],
+                suggested_actions=function_result['suggested_actions'],
+                requires_context=bool(function_result['requires_context'])
+            )
+            
+            yield {
+                "type": "intent_classified",
+                "intent": intent_classification.intent.value,
+                "confidence": intent_classification.confidence_score,
+                "reasoning": intent_classification.reasoning,
+                "suggested_actions": intent_classification.suggested_actions
+            }
+        else:
+            # Fallback: If LLM doesn't call function, classify based on keywords
+            print(f"⚠️ LLM didn't call function, using fallback classification for: {user_input}")
+            
+            fallback_intent = "general_conversation"
+            fallback_confidence = 0.7
+            
+            # Simple keyword-based classification
+            input_lower = user_input.lower()
+            if "draft" in input_lower and ("claim" in input_lower or "patent" in input_lower):
+                fallback_intent = "claim_drafting"
+                fallback_confidence = 0.8
+            elif "review" in input_lower and "claim" in input_lower:
+                fallback_intent = "claim_review"
+                fallback_confidence = 0.8
+            elif "prior art" in input_lower or ("search" in input_lower and ("patent" in input_lower or "prior" in input_lower)):
+                fallback_intent = "prior_art_search"
+                fallback_confidence = 0.9  # High confidence for explicit prior art searches
+            elif "patent" in input_lower or "invention" in input_lower:
+                fallback_intent = "patent_guidance"
+                fallback_confidence = 0.7
+            else:
+                fallback_confidence = 0.7
+            
+            yield {
+                "type": "intent_classified",
+                "intent": fallback_intent,
+                "confidence": fallback_confidence,
+                "reasoning": f"Fallback classification based on keywords in: '{user_input[:50]}...'",
+                "suggested_actions": [f"Proceed with {fallback_intent} workflow"]
+            }
+            
+    except Exception as e:
+        yield {
+            "type": "error",
+            "error": str(e),
+            "context": "intent_classification"
+        }
+
+async def draft_claims_streaming(disclosure: str, document_content: str = "", conversation_history: str = "") -> AsyncGenerator[Dict, None]:
+    """Stream the claims drafting process with detailed thoughts"""
+    
+    context_prompt = ""
+    if conversation_history or document_content:
+        parts = []
+        if conversation_history:
+            parts.append(f"Conversation History:\n{conversation_history[:2000]}...")
+        if document_content:
+            parts.append(f"Document Content:\n{document_content[:2000]}...")
+        context_prompt = "\n\n".join(parts)
+    
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a patent attorney expert. Think step by step through the claim drafting process, explaining your reasoning and decisions. Use the draft_patent_claims function to return structured claim data."
+        },
+        {
+            "role": "user",
+            "content": f"""Draft patent claims based on this invention disclosure. Think through your approach step by step.
+
+User Query: {disclosure}
+{context_prompt}
+
+Requirements:
+1. First claim should be an independent claim (method or system)
+2. Subsequent claims should be dependent claims adding specific features
+3. Follow USPTO formatting and requirements
+4. Use clear, precise language
+5. Ensure claims are patentable subject matter under 35 USC 101
+
+First explain your analysis and approach, then use the draft_patent_claims function."""
+        }
+    ]
+    
+    functions = get_patent_claim_functions()
+    
+    try:
+        claims = []
+        function_result = None
         
-        if response['choices'][0]['message'].get('tool_calls'):
-            tool_call = response['choices'][0]['message']['tool_calls'][0]
-            if tool_call['function']['name'] == 'classify_user_intent':
-                intent_data = json.loads(tool_call['function']['arguments'])
+        async for chunk in send_llm_request_streaming(messages, functions, thought_callback=None):
+            if chunk["type"] == "content_chunk":
+                yield {
+                    "type": "analysis_chunk",
+                    "content": chunk["content"]
+                }
+            elif chunk["type"] == "function_call":
+                # COMMENTED OUT: Technical function call notifications (not needed for users)
+                # yield {
+                #     "type": "thought",
+                #     "thought_type": ThoughtType.GENERATING_CONTENT.value,
+                #     "content": "Generating structured claim data..."
+                # }
+                pass
+            elif chunk["type"] == "completion":
+                if chunk["function_arguments"]:
+                    function_result = json.loads(chunk["function_arguments"])
+        
+        if function_result and "claims" in function_result:
+            for i, claim in enumerate(function_result['claims'], 1):
+                claim_text = f"{claim['claim_number']}. {claim['claim_text']}"
+                claims.append(claim_text)
                 
-                return IntentClassification(
-                    intent=IntentType(intent_data['intent']),
-                    confidence_score=float(intent_data['confidence_score']),
-                    reasoning=intent_data['reasoning'],
-                    suggested_actions=intent_data['suggested_actions'],
-                    requires_context=bool(intent_data['requires_context'])
-                )
+                # COMMENTED OUT: Excessive per-claim notifications (too verbose)
+                # yield {
+                #     "type": "thought",
+                #     "thought_type": ThoughtType.VALIDATING_OUTPUT.value,
+                #     "content": f"Generated claim {i}: {claim['claim_type']} claim"
+                # }
+                
+                await asyncio.sleep(0.2)
+                
+                yield {
+                    "type": "claim_generated",
+                    "claim_number": i,
+                    "claim_text": claim_text,
+                    "claim_type": claim['claim_type'],
+                    "total_claims": len(function_result['claims'])
+                }
         
-        # If no function call, raise error - no fallback
-        raise RuntimeError("LLM did not return a function call for intent classification")
+        yield {
+            "type": "thought",
+            "thought_type": ThoughtType.MAKING_DECISION.value,
+            "content": f"Successfully completed claims drafting: {len(claims)} claims generated"
+        }
+        
+        yield {
+            "type": "claims_complete",
+            "claims": claims,
+            "num_claims": len(claims),
+            "summary": function_result.get('summary', '') if function_result else ''
+        }
         
     except Exception as e:
-        logging.error(f"Error in intent classification: {e}")
-        # No fallback - re-raise the error
-        raise
+        yield {
+            "type": "error",
+            "error": str(e),
+            "context": "claims_drafting"
+        }
 
 def get_intent_classification_functions():
     """Define functions for intent classification"""
@@ -240,23 +465,17 @@ def get_patent_claim_functions():
                                 "type": "object",
                                 "properties": {
                                     "claim_number": {"type": "integer"},
-                                    "claim_text": {"type": "string", "description": "Complete claim text including all elements"},
+                                    "claim_text": {"type": "string"},
                                     "claim_type": {
                                         "type": "string",
                                         "enum": ["independent", "dependent"]
                                     },
-                                    "dependency": {
-                                        "type": "string",
-                                        "description": "For dependent claims, specify what they depend on (e.g., 'claim 1')"
-                                    }
+                                    "dependency": {"type": "string"}
                                 },
                                 "required": ["claim_number", "claim_text", "claim_type"]
                             }
                         },
-                        "summary": {
-                            "type": "string",
-                            "description": "Brief summary of the drafted claims"
-                        }
+                        "summary": {"type": "string"}
                     },
                     "required": ["claims", "summary"]
                 }
@@ -264,572 +483,88 @@ def get_patent_claim_functions():
         }
     ]
 
-# NOTE: We let the drafting function decide how many claims to produce based on the disclosure and session context.
-def draft_claims(disclosure: str, document_content: str = "", conversation_history: str = "") -> List[str]:
-    """Draft patent claims using structured LLM output.
-
-    Inputs:
-      - disclosure: the user's latest message / invention disclosure
-      - document_content: full text of the current Word document (if provided)
-      - conversation_history: prior chat messages or session context
-
-    The model should decide the appropriate number of claims (recommended 3-7) based on the
-    complexity of the disclosure and context. Return a list of complete claim texts.
-    """
+async def agent_run_streaming_with_thoughts(user_input: str, conversation_context: str = "") -> AsyncGenerator[Dict[str, Any], None]:
+    """Enhanced streaming version with detailed LLM decision thoughts"""
     try:
-        # Build context-aware prompt
-        context_prompt = ""
-        if conversation_history or document_content:
-            parts = []
-            if conversation_history:
-                logging.info(f"Using conversation_history ({len(conversation_history)} chars) for claims drafting")
-                parts.append(f"Conversation History:\n{conversation_history}")
-            if document_content:
-                logging.info(f"Using document_content ({len(document_content)} chars) for claims drafting")
-                parts.append(f"Document Content:\n{document_content}")
-            context_prompt = "\n\n".join(parts)
-        else:
-            logging.info("No session history or document content available for claims drafting")
-        
-        messages = [
-            {
-                "role": "system",
-                "content": """You are a patent attorney expert in drafting USPTO-compliant patent claims. 
-
-IMPORTANT: Use the draft_patent_claims function to return structured claim data. Each claim must be complete and self-contained."""
-            },
-            {
-                "role": "user",
-                "content": f"""Draft an appropriate set of patent claims based on the user's query and the provided context. Choose a reasonable number of claims (typically 3-7) based on the scope and complexity; provide one independent claim followed by dependent claims as appropriate.
-
-User Query:
-{disclosure}
-
-Document Content (from the open document, if any):
-{document_content if document_content else 'None'}
-
-Conversation History (if any):
-{conversation_history if conversation_history else 'None'}
-
-Requirements:
-1. First claim should be an independent claim (method or system).
-2. Subsequent claims should be dependent claims adding specific features.
-3. Follow USPTO formatting and requirements.
-4. Use clear, precise language.
-5. Ensure claims are patentable subject matter under 35 USC 101.
-6. Maintain consistency with session context if available.
-
-Use the draft_patent_claims function to return structured claim data, and include a short explanation of why you selected the number of claims."""
-            }
-        ]
-        
-        # Use function calling for structured output
-        functions = get_patent_claim_functions()
-        response = send_llm_request_with_functions(messages, functions)
-        
-        logging.info(f"Function calling response received")
-        
-        if response['choices'][0]['message'].get('tool_calls'):
-            tool_call = response['choices'][0]['message']['tool_calls'][0]
-            logging.info(f"Tool call: {tool_call['function']['name']}")
-            
-            if tool_call['function']['name'] == 'draft_patent_claims':
-                try:
-                    claim_data = json.loads(tool_call['function']['arguments'])
-                    logging.info(f"Parsed claim data: {claim_data}")
-                    
-                    # Extract claims from structured data
-                    claims = []
-                    for claim in claim_data['claims']:
-                        claim_text = f"{claim['claim_number']}. {claim['claim_text']}"
-                        claims.append(claim_text)
-                        logging.info(f"Generated claim {claim['claim_number']}: {claim['claim_text'][:100]}...")
-                    
-                    return claims if claims else [f"Error: Could not generate valid patent claims. Please try again with more detailed invention description."]
-                    
-                except Exception as e:
-                    logging.error(f"Error parsing function call data: {e}")
-                    # Fall through to fallback
-        
-        # Fallback: simple text response if function calling fails
-        logging.warning("Function calling failed, using fallback text parsing")
-        content = send_llm_request(messages)
-        
-        # Simple fallback - just split by numbered lines
-        lines = content.split('\n')
-        claims = []
-        current_claim = ""
-        
-        for line in lines:
-            line = line.strip()
-            if re.match(r'^\d+\.', line):
-                if current_claim:
-                    claims.append(current_claim.strip())
-                current_claim = line
-            elif line and current_claim:
-                current_claim += " " + line
-        
-        if current_claim:
-            claims.append(current_claim.strip())
-        
-        return claims if claims else [f"Error: Could not generate valid patent claims. Please try again with more detailed invention description."]
-        
-    except Exception as e:
-        logging.error(f"Error drafting claims: {e}")
-        return [f"Error drafting claims: {str(e)}"]
-
-def get_claim_review_functions():
-    """Define functions for structured claim review output"""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "review_patent_claims",
-                "description": "Review patent claims and provide structured feedback",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "review_comments": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "comment_id": {"type": "integer"},
-                                    "claim_reference": {"type": "string", "description": "Which claim this comment refers to"},
-                                    "issue_category": {
-                                        "type": "string",
-                                        "enum": ["uspto_compliance", "claim_structure", "clarity_precision", "technical_accuracy", "patent_strategy"]
-                                    },
-                                    "problem_description": {"type": "string"},
-                                    "severity": {
-                                        "type": "string",
-                                        "enum": ["minor", "major", "critical"]
-                                    },
-                                    "suggested_improvement": {"type": "string"}
-                                },
-                                "required": ["comment_id", "claim_reference", "issue_category", "problem_description", "severity", "suggested_improvement"]
-                            }
-                        },
-                        "overall_assessment": {
-                            "type": "string",
-                            "description": "Overall assessment of the claims"
-                        }
-                    },
-                    "required": ["review_comments", "overall_assessment"]
-                }
-            }
-        }
-    ]
-
-def review_claims(claims_text: str, session_history: str = "") -> List[ReviewComment]:
-    """Review patent claims using structured LLM output"""
-    try:
-        # Build context-aware prompt
-        context_prompt = ""
-        if session_history:
-            logging.info(f"Using session history ({len(session_history)} chars) for claims review")
-            context_prompt = f"""
-
-Session Context:
-{session_history}
-
-Use this context to understand what was previously discussed and provide more relevant feedback."""
-        else:
-            logging.info("No session history available for claims review")
-        
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a senior patent attorney expert in USPTO compliance and patent claim quality. Use the review_patent_claims function to return structured review data."
-            },
-            {
-                "role": "user", 
-                "content": f"""Review these patent claims for quality, compliance, and potential improvements:
-
-{claims_text}{context_prompt}
-
-Review each claim for:
-1. **USPTO Compliance**: 35 USC 101 (patentable subject matter), 102 (novelty), 103 (obviousness)
-2. **Claim Structure**: Independent vs dependent, proper dependencies
-3. **Clarity & Precision**: Clear language, definite boundaries, proper terminology
-4. **Technical Accuracy**: Logical flow, complete elements, proper scope
-5. **Patent Strategy**: Claim breadth, coverage, potential issues
-
-Use the review_patent_claims function to return structured review data with specific issues and improvements."""
-            }
-        ]
-        
-        # Use function calling for structured output
-        functions = get_claim_review_functions()
-        response = send_llm_request_with_functions(messages, functions)
-        
-        logging.info(f"Function calling response received for review")
-        
-        if response['choices'][0]['message'].get('tool_calls'):
-            tool_call = response['choices'][0]['message']['tool_calls'][0]
-            logging.info(f"Tool call: {tool_call['function']['name']}")
-            
-            if tool_call['function']['name'] == 'review_patent_claims':
-                try:
-                    review_data = json.loads(tool_call['function']['arguments'])
-                    logging.info(f"Parsed review data: {review_data}")
-                    
-                    # Convert structured data to ReviewComment objects
-                    review_comments = []
-                    for comment in review_data['review_comments']:
-                        comment_text = f"{comment['claim_reference']}: {comment['problem_description']} - {comment['suggested_improvement']}"
-                        review_comments.append(ReviewComment(
-                            comment=comment_text,
-                            severity=comment['severity']
-                        ))
-                    
-                    return review_comments if review_comments else [
-                        ReviewComment(
-                            comment="No specific issues found. Claims appear to be well-drafted and compliant.",
-                            severity="minor"
-                        )
-                    ]
-                    
-                except Exception as e:
-                    logging.error(f"Error parsing function call data: {e}")
-                    # Fall through to fallback
-        
-        # Fallback: simple text response if function calling fails
-        logging.warning("Function calling failed for review, using fallback text parsing")
-        content = send_llm_request(messages)
-        
-        # Simple fallback parsing
-        review_comments = []
-        lines = content.split('\n')
-        current_comment = ""
-        current_severity = "minor"
-        
-        for line in lines:
-            line = line.strip()
-            if re.match(r'^\d+\.', line):
-                if current_comment:
-                    review_comments.append(ReviewComment(
-                        comment=current_comment.strip(),
-                        severity=current_severity
-                    ))
-                current_comment = line
-                current_severity = "minor"
-            elif line.lower().startswith(('severity:', 'level:', 'priority:')):
-                if 'critical' in line.lower():
-                    current_severity = "critical"
-                elif 'major' in line.lower():
-                    current_severity = "major"
-                else:
-                    current_severity = "minor"
-                current_comment += " " + line
-            elif line:
-                current_comment += " " + line
-        
-        if current_comment:
-            review_comments.append(ReviewComment(
-                comment=current_comment.strip(),
-                severity=current_severity
-            ))
-        
-        return review_comments if review_comments else [
-            ReviewComment(
-                comment="No specific issues found. Claims appear to be well-drafted and compliant.",
-                severity="minor"
-            )
-        ]
-        
-    except Exception as e:
-        logging.error(f"Error reviewing claims: {e}")
-        return [ReviewComment(
-            comment=f"Error reviewing claims: {str(e)}. Please try again.",
-            severity="critical"
-        )]
-
-def general_conversation(query: str) -> str:
-    """Handle general conversation and guidance"""
-    try:
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful patent attorney AI assistant. Provide clear, actionable guidance on patent-related topics."
-            },
-            {
-                "role": "user",
-                "content": query
-            }
-        ]
-        
-        response = send_llm_request(messages)
-        return response
-        
-    except Exception as e:
-        logging.error(f"Error in general_conversation: {e}")
-        return "I'm here to help with patent drafting! What would you like to work on?"
-
-async def agent_run(user_input: str, conversation_context: str = "") -> AgentResponse:
-    """Main agent logic with simple confidence threshold: execute (>0.7) or seek clarification (≤0.7)"""
-    try:
-        # Step 1: Classify user intent using LLM
-        intent_classification = await classify_user_intent(user_input, conversation_context)
-        
-        logging.info(f"Intent classified as: {intent_classification.intent} (confidence: {intent_classification.confidence_score})")
-        logging.info(f"Reasoning: {intent_classification.reasoning}")
-        
-        # Step 2: Simple confidence threshold decision
-        if intent_classification.confidence_score <= 0.7:
-            # Confidence too low - seek clarification
-            return AgentResponse(
-                conversation_response="I'm not entirely sure what you're asking for. Could you provide more details about what you need?",
-                reasoning=f"Low confidence ({intent_classification.confidence_score}) - seeking user clarification",
-                should_draft_claims=False
-            )
-        
-        # Confidence > 0.7 - execute the detected intent
-        if intent_classification.intent == IntentType.CLAIM_DRAFTING:
-            # Draft patent claims with session history. The drafting routine decides how many claims are appropriate.
-            claims = draft_claims(user_input, conversation_context)
-            
-            # Try to extract structured data if available
-            structured_claims = None
-            drafting_result = None
-            
-            # Check if we have structured claim data from function calling
-            try:
-                # This would be populated if function calling succeeded
-                # For now, we'll create a basic structure
-                structured_claims = []
-                for i, claim_text in enumerate(claims, 1):
-                    if "Error:" in claim_text:
-                        continue
-                    claim_type = "independent" if i == 1 else "dependent"
-                    dependency = f"claim {i-1}" if i > 1 else None
-                    structured_claims.append({
-                        "claim_number": i,
-                        "claim_text": claim_text,
-                        "claim_type": claim_type,
-                        "dependency": dependency
-                    })
-            except Exception as e:
-                logging.warning(f"Could not create structured claims: {e}")
-            
-            return AgentResponse(
-                conversation_response=f"I've drafted {len(claims)} patent claims based on your invention:\n\n" + "\n\n".join(claims),
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). {intent_classification.reasoning}",
-                should_draft_claims=True,
-                claims=claims,
-                structured_claims=structured_claims
-            )
-            
-        elif intent_classification.intent == IntentType.CLAIM_REVIEW:
-            # Handle claim review - extract claims from user input and review them
-            # The user input should contain the claims to review
-            review_comments = review_claims(user_input, conversation_context)
-            
-            # Try to extract structured review data if available
-            review_result = None
-            try:
-                # This would be populated if function calling succeeded
-                # For now, we'll create a basic structure
-                review_result = {
-                    "review_comments": review_comments,
-                    "overall_assessment": f"Found {len(review_comments)} issues to address",
-                    "claims_reviewed": [user_input]  # Store what was reviewed
-                }
-            except Exception as e:
-                logging.warning(f"Could not create structured review result: {e}")
-            
-            # Format the response
-            if review_comments:
-                response_text = f"I've reviewed your patent claims and found {len(review_comments)} issue(s):\n\n"
-                for i, comment in enumerate(review_comments, 1):
-                    severity_emoji = {"critical": "🔴", "major": "🟡", "minor": "🟢"}
-                    response_text += f"{severity_emoji.get(comment.severity, '⚪')} **{comment.severity.upper()}**: {comment.comment}\n\n"
-            else:
-                response_text = "I've reviewed your patent claims and found no specific issues. They appear to be well-drafted and compliant."
-            
-            return AgentResponse(
-                conversation_response=response_text,
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). {intent_classification.reasoning}",
-                should_draft_claims=False,
-                review_comments=review_comments,
-                review_result=review_result
-            )
-            
-        elif intent_classification.intent == IntentType.PATENT_GUIDANCE:
-            # Provide patent guidance
-            response_text = general_conversation(user_input)
-            return AgentResponse(
-                conversation_response=response_text,
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). {intent_classification.reasoning}",
-                should_draft_claims=False
-            )
-        elif intent_classification.intent == IntentType.PRIOR_ART_SEARCH:
-            # Prior art search handler
-            from .prior_art_search import search_prior_art_optimized
-
-            # Extract search terms (simple heuristic; LLM can refine)
-            search_terms = user_input.replace("search prior art", "").replace("find prior art", "").replace("prior art", "").strip()
-            if not search_terms:
-                search_terms = user_input
-
-            result = search_prior_art_optimized(search_terms, max_results=10)
-            
-            # Format the result for display
-            from .prior_art_search import format_optimized_results
-            formatted_results = format_optimized_results(result)
-            
-            # Create simplified result structure for compatibility
-            simplified = {
-                "results": formatted_results,
-                "thought_process": f"Prior art search completed for: {search_terms}",
-                "prior_art_result": formatted_results,
-                "patents": [patent.patent_id for patent in result.patents]
-            }
-
-            return AgentResponse(
-                conversation_response=formatted_results,
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). Found {len(result.patents)} relevant patents",
-                should_draft_claims=False,
-                prior_art_result=simplified
-            )
-            
-        elif intent_classification.intent == IntentType.INVENTION_ANALYSIS:
-            # Analyze invention for patentability
-            analysis = general_conversation(f"Please analyze this invention for patentability and provide specific guidance: {user_input}")
-            return AgentResponse(
-                conversation_response=analysis,
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). {intent_classification.reasoning}",
-                should_draft_claims=False
-            )
-            
-        elif intent_classification.intent == IntentType.TECHNICAL_QUERY:
-            # Handle technical questions
-            response_text = general_conversation(user_input)
-            return AgentResponse(
-                conversation_response=response_text,
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). {intent_classification.reasoning}",
-                should_draft_claims=False
-            )
-            
-        else:
-            # General conversation
-            response_text = general_conversation(user_input)
-            return AgentResponse(
-                conversation_response=response_text,
-                reasoning=f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score}). {intent_classification.reasoning}",
-                should_draft_claims=False
-            )
-            
-    except Exception as e:
-        logging.error(f"Error in agent_run: {e}")
-        return AgentResponse(
-            conversation_response="I encountered an error processing your request. Could you try rephrasing it?",
-            reasoning=f"Error occurred: {str(e)}",
-            should_draft_claims=False
-        )
-
-# Agent class for compatibility
-class IntelligentAgent:
-    """Intelligent agent with simple confidence threshold: execute (>0.7) or seek clarification (≤0.7)"""
-    async def run(self, user_input: str, conversation_context: str = ""):
-        return await agent_run(user_input, conversation_context)
-    
-    async def run_streaming(self, user_input: str, conversation_context: str = ""):
-        """Streaming version of agent logic that yields progress as each step completes"""
-        async for event in agent_run_streaming(user_input, conversation_context):
+        # Step 1: Intent classification with thoughts
+        intent_classification = None
+        async for event in classify_user_intent_streaming(user_input, conversation_context):
             yield event
-
-async def agent_run_streaming(user_input: str, conversation_context: str = "") -> AsyncGenerator[Dict[str, Any], None]:
-    """Streaming version of agent logic that yields progress as each step completes"""
-    try:
-        # Step 1: Stream intent classification
-        yield {
-            "type": "intent_analysis",
-            "message": "Analyzing your request to understand the intent...",
-            "user_input": user_input[:100] + "..." if len(user_input) > 100 else user_input
-        }
+            if event.get("type") == "intent_classified":
+                intent_classification = IntentClassification(
+                    intent=IntentType(event["intent"]),
+                    confidence_score=event["confidence"],
+                    reasoning=event["reasoning"],
+                    suggested_actions=event["suggested_actions"],
+                    requires_context=True  # Default assumption
+                )
         
-        intent_classification = await classify_user_intent(user_input, conversation_context)
+        if not intent_classification:
+            # Fallback intent classification if nothing was received
+            print("⚠️ No intent classification received, using fallback")
+            fallback_intent_type = "general_conversation"
+            
+            # Simple keyword-based fallback
+            input_lower = user_input.lower()
+            fallback_intent_type = "general_conversation"
+            fallback_confidence = 0.6
+            
+            if "draft" in input_lower and ("claim" in input_lower or "patent" in input_lower):
+                fallback_intent_type = "claim_drafting"
+                fallback_confidence = 0.8
+            elif "review" in input_lower and "claim" in input_lower:
+                fallback_intent_type = "claim_review"
+                fallback_confidence = 0.8
+            elif "prior art" in input_lower or "search" in input_lower:
+                fallback_intent_type = "prior_art_search"
+                fallback_confidence = 0.8  # Higher confidence for prior art searches
+            elif "patent" in input_lower or "invention" in input_lower:
+                fallback_intent_type = "patent_guidance"
+                fallback_confidence = 0.7
+            
+            intent_classification = IntentClassification(
+                intent=IntentType(fallback_intent_type),
+                confidence_score=fallback_confidence,
+                reasoning=f"Fallback classification for: {user_input[:50]}...",
+                suggested_actions=[f"Proceed with {fallback_intent_type}"],
+                requires_context=False
+            )
+            
+            yield {
+                "type": "intent_classified",
+                "intent": intent_classification.intent.value,
+                "confidence": intent_classification.confidence_score,
+                "reasoning": intent_classification.reasoning,
+                "suggested_actions": intent_classification.suggested_actions
+            }
         
-        yield {
-            "type": "intent_classified",
-            "intent": intent_classification.intent.value,
-            "confidence_score": intent_classification.confidence_score,
-            "reasoning": intent_classification.reasoning,
-            "suggested_actions": intent_classification.suggested_actions
-        }
-        
-        logging.info(f"Intent classified as: {intent_classification.intent} (confidence: {intent_classification.confidence_score})")
-        
-        # Step 2: Check confidence threshold
-        if intent_classification.confidence_score <= 0.7:
+        # Step 2: Confidence threshold check - only for very low confidence
+        if intent_classification.confidence_score <= 0.5:
             yield {
                 "type": "low_confidence",
-                "message": "I'm not entirely sure what you're asking for. Could you provide more details?",
-                "confidence": intent_classification.confidence_score
+                "text": "I need more information to help you effectively. Could you provide more details?",
+                "confidence": intent_classification.confidence_score,
+                "suggestions": intent_classification.suggested_actions
             }
             return
         
-        # Step 3: Execute high-confidence intents with streaming
+        # Step 3: Execute high-confidence intents with detailed thoughts
         if intent_classification.intent == IntentType.CLAIM_DRAFTING:
-            yield {
-                "type": "claims_drafting_start",
-                "message": "Starting patent claims drafting...",
-                "disclosure_length": len(user_input)
-            }
-            
-            yield {
-                "type": "claims_progress",
-                "message": "Analyzing invention disclosure...",
-                "stage": "analysis"
-            }
-            await asyncio.sleep(0.3)  # Simulate analysis time
-            
-            yield {
-                "type": "claims_progress",
-                "message": "Identifying key inventive features...",
-                "stage": "feature_identification"
-            }
-            await asyncio.sleep(0.4)  # Simulate feature identification time
-            
-            yield {
-                "type": "claims_progress",
-                "message": "Drafting comprehensive patent claims...",
-                "stage": "drafting"
-            }
-            await asyncio.sleep(0.3)  # Simulate drafting preparation time
-            
-            # Actually draft the claims
-            claims = draft_claims(user_input, conversation_context)
-            
-            # Stream each claim as it's "generated" with simulated delays
-            for i, claim in enumerate(claims, 1):
-                # Simulate the time it takes to generate each claim
-                await asyncio.sleep(0.5)  # 500ms delay between claims
-                
-                yield {
-                    "type": "claim_generated",
-                    "claim_number": i,
-                    "text": claim,
-                    "total_claims": len(claims)
-                }
-            
-            yield {
-                "type": "claims_complete",
-                "message": f"Successfully drafted {len(claims)} patent claims",
-                "num_claims": len(claims),
-                "claims": claims
-            }
-            
-            # Send final completion event with the actual claims
+            # Stream claims drafting with thoughts
+            claims = []
+            async for event in draft_claims_streaming(user_input, "", conversation_context):
+                yield event
+                if event.get("type") == "claims_complete":
+                    claims = event.get("claims", [])
+
+            response_text = f"I've drafted {len(claims)} patent claims based on your invention:\n\n" + "\n\n".join(claims)
             yield {
                 "type": "complete",
-                "message": f"Successfully drafted {len(claims)} patent claims",
-                "response": f"I've drafted {len(claims)} patent claims based on your invention:\n\n" + "\n\n".join(claims),
+                "response": response_text,
                 "metadata": {
                     "should_draft_claims": True,
                     "has_claims": True,
-                    "reasoning": f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score})"
+                    "reasoning": f"Executed {intent_classification.intent.value} with {intent_classification.confidence_score:.0%} confidence"
                 },
                 "data": {
                     "claims": claims,
@@ -838,129 +573,151 @@ async def agent_run_streaming(user_input: str, conversation_context: str = "") -
             }
             
         elif intent_classification.intent == IntentType.PRIOR_ART_SEARCH:
-            yield {
-                "type": "prior_art_start",
-                "message": "Starting prior art search..."
-            }
-            await asyncio.sleep(0.3)  # Simulate startup time
-            
-            yield {
-                "type": "prior_art_progress",
-                "message": "Searching patent databases for relevant prior art...",
-                "stage": "searching"
-            }
-            await asyncio.sleep(0.8)  # Simulate database search time
-            
-            yield {
-                "type": "prior_art_progress",
-                "message": "Analyzing search results for relevance and blocking potential...",
-                "stage": "analyzing"
-            }
-            await asyncio.sleep(0.6)  # Simulate analysis time
-            
-            yield {
-                "type": "prior_art_progress",
-                "message": "Generating comprehensive prior art analysis report...",
-                "stage": "reporting"
-            }
-            await asyncio.sleep(0.5)  # Simulate report generation time
-            
-            # Actually perform the search
-            from .prior_art_search import search_prior_art_optimized, format_optimized_results
-            
-            search_terms = user_input.replace("search prior art", "").replace("find prior art", "").replace("prior art", "").strip()
+            # Real prior art search using the optimized module
+            search_terms = user_input.replace("prior art search results for", "").replace("search prior art", "").replace("find prior art", "").strip()
             if not search_terms:
                 search_terms = user_input
-                
-            result = search_prior_art_optimized(search_terms, max_results=10)
-            formatted_results = format_optimized_results(result)
             
             yield {
-                "type": "prior_art_complete",
-                "message": "Prior art search completed",
-                "results": formatted_results,
-                "patents_found": len(result.patents)
+                "type": "thinking",
+                "content": f"🔍 Performing prior art search for: {search_terms}",
+                "metadata": {"search_terms": search_terms}
             }
             
-            # Send final completion event with the prior art results
+            try:
+                yield {
+                    "type": "thinking", 
+                    "content": "📡 Connecting to patent databases...",
+                    "metadata": {}
+                }
+                
+                # Perform the actual search using clean architecture
+                config = PatentSearchConfig()
+                # Lower relevance threshold for better frontend results
+                config.default_relevance_threshold = 0.2
+                engine = PatentSearchEngine(config)
+                
+                search_result = await engine.search(search_terms, max_results=20, relevance_threshold=0.2)
+                
+                yield {
+                    "type": "thinking",
+                    "content": f"📊 Found {search_result.total_found} relevant patents",
+                    "metadata": {"patents_found": search_result.total_found}
+                }
+                
+                # Format the results using enhanced LLM report generation
+                yield {
+                    "type": "thinking",
+                    "content": "🧠 Generating comprehensive patent attorney report...",
+                    "metadata": {}
+                }
+                
+                # Generate comprehensive report using clean architecture
+                formatted_results = await engine.generate_report(search_result)
+                
+                yield {
+                    "type": "complete",
+                    "response": formatted_results,
+                    "metadata": {
+                        "should_draft_claims": False,
+                        "has_claims": False,
+                        "reasoning": f"Completed prior art search with {intent_classification.confidence_score:.0%} confidence"
+                    },
+                    "data": {
+                        "prior_art_result": {
+                            "search_terms": search_terms,
+                            "patents_found": search_result.total_found,
+                            "patents": [
+                                {
+                                    "patent_id": p.patent_id,
+                                    "title": p.title,
+                                    "relevance_score": p.relevance_score
+                                } for p in search_result.patents[:20]
+                            ]
+                        }
+                    }
+                }
+                
+            except ImportError as e:
+                # Fallback if prior art search module isn't available
+                formatted_results = f"""# Prior Art Search for '{search_terms}'
+
+**⚠️ Enhanced Search Temporarily Unavailable**
+
+I've identified your request for prior art search on **{search_terms}**. However, the full patent database search functionality is currently unavailable.
+
+## What you can do:
+1. **Manual Search**: Visit [Google Patents](https://patents.google.com) and search for "{search_terms}"
+2. **Patent Databases**: Check USPTO, EPO, or other patent offices
+3. **Technical Literature**: Review IEEE Xplore, ACM Digital Library for related work
+
+## Search Terms Identified:
+- **{search_terms}**
+
+This appears to be in the **telecommunications/AI** domain, which typically has extensive prior art. I recommend conducting a thorough search before filing any patent applications.
+"""
+                
+                yield {
+                    "type": "complete",
+                    "response": formatted_results,
+                    "metadata": {
+                        "should_draft_claims": False,
+                        "has_claims": False,
+                        "reasoning": f"Prior art search intent identified with {intent_classification.confidence_score:.0%} confidence, but enhanced search unavailable"
+                    },
+                    "data": {
+                        "prior_art_result": {
+                            "search_terms": search_terms,
+                            "status": "fallback_response",
+                            "message": "Enhanced search temporarily unavailable"
+                        }
+                    }
+                }
+                
+            except Exception as e:
+                error_msg = f"Prior art search failed: {str(e)}"
+                logging.error(error_msg)
+                yield {
+                    "type": "error",
+                    "error": error_msg,
+                    "text": f"I encountered an error while searching for prior art: {str(e)}. Please try again or contact support."
+                }
+            
+        else:
+            # Handle other intents (general conversation)
+            # Simulate response generation
+            await asyncio.sleep(0.3)
+            response_text = "I'm here to help with your patent-related questions. What specific aspect would you like to explore?"
+            
             yield {
                 "type": "complete",
-                "message": "Prior art search completed",
-                "response": formatted_results,
+                "response": response_text,
                 "metadata": {
                     "should_draft_claims": False,
                     "has_claims": False,
-                    "reasoning": f"Executing {intent_classification.intent.value} (confidence: {intent_classification.confidence_score})"
-                },
-                "data": {
-                    "prior_art_result": {
-                        "results": formatted_results,
-                        "patents_found": len(result.patents)
-                    }
+                    "reasoning": f"Executed {intent_classification.intent.value} with {intent_classification.confidence_score:.0%} confidence"
                 }
-            }
-            
-        elif intent_classification.intent == IntentType.CLAIM_REVIEW:
-            yield {
-                "type": "review_start",
-                "message": "Starting claim review process..."
-            }
-            
-            yield {
-                "type": "review_progress",
-                "message": "Analyzing claim structure and language...",
-                "stage": "analysis"
-            }
-            
-            yield {
-                "type": "review_progress",
-                "message": "Checking USPTO compliance...",
-                "stage": "compliance_check"
-            }
-            
-            # Actually review the claims
-            review_comments = review_claims(user_input, conversation_context)
-            
-            yield {
-                "type": "review_complete",
-                "message": f"Claim review completed - found {len(review_comments)} issues",
-                "review_comments": review_comments
-            }
-            
-        else:
-            # Handle other intents
-            yield {
-                "type": "processing",
-                "message": f"Processing {intent_classification.intent.value} request...",
-                "intent": intent_classification.intent.value
-            }
-            
-            # Execute the intent
-            if intent_classification.intent == IntentType.PATENT_GUIDANCE:
-                response_text = general_conversation(user_input)
-            elif intent_classification.intent == IntentType.INVENTION_ANALYSIS:
-                response_text = general_conversation(f"Please analyze this invention for patentability and provide specific guidance: {user_input}")
-            elif intent_classification.intent == IntentType.TECHNICAL_QUERY:
-                response_text = general_conversation(user_input)
-            else:
-                response_text = general_conversation(user_input)
-            
-            yield {
-                "type": "complete",
-                "message": "Request processed successfully",
-                "response": response_text
             }
         
     except Exception as e:
-        logging.error(f"Error in agent_run_streaming: {e}")
+        logging.error(f"Error in agent_run_streaming_with_thoughts: {e}")
         yield {
             "type": "error",
             "error": str(e),
-            "message": "I encountered an error processing your request. Please try again."
+            "text": f"I encountered an error: {str(e)}. Please try again."
         }
 
-# Export the agent
-agent = IntelligentAgent()
+# Enhanced Agent class
+class IntelligentAgentWithThoughts:
+    """Enhanced intelligent agent with detailed LLM decision thought streaming"""
+    
+    async def run_streaming(self, user_input: str, conversation_context: str = ""):
+        """Streaming version with detailed LLM thoughts"""
+        async for event in agent_run_streaming_with_thoughts(user_input, conversation_context):
+            yield event
 
-# Setup logger
+# Export the enhanced agent
+agent_with_thoughts = IntelligentAgentWithThoughts()
+
+# Setup logging
 logging.basicConfig(level=logging.INFO)

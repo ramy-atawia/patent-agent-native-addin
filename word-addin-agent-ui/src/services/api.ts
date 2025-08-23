@@ -54,23 +54,11 @@ export interface ApiError {
   details?: any;
 }
 
-// Event types that match your backend
+// Ultra-simplified event types - just what we actually need
 export type EventType = 
-  | 'intent_analysis'
-  | 'intent_classified'
-  | 'claims_drafting_start'
-  | 'claims_progress'
-  | 'claims_complete'
-  | 'prior_art_start'
-  | 'prior_art_progress'
-  | 'prior_art_complete'
-  | 'review_start'
-  | 'review_progress'
-  | 'review_complete'
-  | 'processing'
-  | 'complete'
-  | 'error'
-  | 'low_confidence';
+  | 'thoughts'              // All AI thinking/reasoning/progress → Small streaming bubbles
+  | 'results'               // Final results/completion → Large final bubble
+  | 'error';                // Error states → Error handling
 
 class ApiService {
   private api: AxiosInstance;
@@ -199,100 +187,10 @@ class ApiService {
               const parsed = JSON.parse(content);
               console.log(`🔍 Processing event: ${currentEventType}`, parsed);
               
-              // Handle the streaming events based on your backend implementation
+              // Simplified event handling - just thoughts and results
               switch (currentEventType) {
-                case 'intent_analysis':
-                  onChunk(parsed.text || parsed.message || 'Analyzing your request...', 'intent_analysis');
-                  break;
-                  
-                case 'intent_classified':
-                  onChunk(parsed.text || `Intent: ${parsed.intent_type} (${Math.round((parsed.confidence || 0) * 100)}% confidence)`, 'intent_classified');
-                  break;
-                  
-                case 'claims_drafting_start':
-                  onChunk(parsed.text || 'Starting patent claims drafting...', 'claims_drafting_start');
-                  break;
-                  
-                case 'claims_progress':
-                  // Handle different stages of claims progress
-                  if (parsed.stage === 'analysis') {
-                    onChunk(parsed.text || 'Analyzing invention disclosure...', 'claims_progress');
-                  } else if (parsed.stage === 'feature_identification') {
-                    onChunk(parsed.text || 'Identifying key inventive features...', 'claims_progress');
-                  } else if (parsed.stage === 'drafting') {
-                    onChunk(parsed.text || 'Drafting comprehensive patent claims...', 'claims_progress');
-                  } else if (parsed.claim_number) {
-                    // Show the actual claim text, not just "Generated claim X of Y"
-                    const claimText = parsed.text || `Claim ${parsed.claim_number} of ${parsed.total_claims}`;
-                    onChunk(claimText, 'claims_progress');
-                  } else {
-                    onChunk(parsed.text || 'Processing claims...', 'claims_progress');
-                  }
-                  break;
-                  
-                case 'claim_generated':
-                  // Handle individual claim generation events
-                  const claimText = parsed.text || `Claim ${parsed.claim_number} of ${parsed.total_claims}`;
-                  onChunk(claimText, 'claim_generated');
-                  break;
-                  
-                case 'claims_complete':
-                  const claimsMsg = parsed.num_claims ? 
-                    `Successfully drafted ${parsed.num_claims} patent claims` : 
-                    'Patent claims completed';
-                  onChunk(parsed.text || claimsMsg, 'claims_complete');
-                  break;
-                  
-                case 'prior_art_start':
-                  onChunk(parsed.text || 'Starting prior art search...', 'prior_art_start');
-                  break;
-                  
-                case 'prior_art_progress':
-                  if (parsed.stage === 'searching') {
-                    onChunk(parsed.text || 'Searching patent databases...', 'prior_art_progress');
-                  } else if (parsed.stage === 'analyzing') {
-                    onChunk(parsed.text || 'Analyzing search results for relevance...', 'prior_art_progress');
-                  } else if (parsed.stage === 'reporting') {
-                    onChunk(parsed.text || 'Generating comprehensive prior art report...', 'prior_art_progress');
-                  } else {
-                    onChunk(parsed.text || 'Processing prior art...', 'prior_art_progress');
-                  }
-                  break;
-                  
-                case 'prior_art_complete':
-                  const patentsMsg = parsed.patents_found ? 
-                    `Prior art search completed - found ${parsed.patents_found} relevant patents` : 
-                    'Prior art search completed';
-                  onChunk(parsed.text || patentsMsg, 'prior_art_complete');
-                  break;
-                  
-                case 'review_start':
-                  onChunk(parsed.text || 'Starting patent claim review...', 'review_start');
-                  break;
-                  
-                case 'review_progress':
-                  if (parsed.stage === 'analysis') {
-                    onChunk(parsed.text || 'Analyzing claim structure and language...', 'review_progress');
-                  } else if (parsed.stage === 'compliance_check') {
-                    onChunk(parsed.text || 'Checking USPTO compliance...', 'review_progress');
-                  } else {
-                    onChunk(parsed.text || 'Reviewing claims...', 'review_progress');
-                  }
-                  break;
-                  
-                case 'review_complete':
-                  const reviewMsg = parsed.review_comments?.length ? 
-                    `Claim review completed - found ${parsed.review_comments.length} issues to address` : 
-                    'Claim review completed';
-                  onChunk(parsed.text || reviewMsg, 'review_complete');
-                  break;
-                  
-                case 'processing':
-                  onChunk(parsed.message || parsed.text || 'Processing your request...', 'processing');
-                  break;
-                  
-                case 'complete':
-                  // Final completion with results
+                case 'results':
+                  // Final completion with results (new simplified backend)
                   finalResponse = {
                     response: parsed.response || 'Process completed',
                     metadata: parsed.metadata || {
@@ -323,8 +221,45 @@ class ApiService {
                   }
                   
                   console.log('🎯 Final response prepared:', finalResponse);
-                  onChunk(parsed.response || 'Process completed', 'complete');
-                  break;
+                  onChunk(parsed.response || 'Process completed', 'results');
+                  onComplete(finalResponse);
+                  return;
+                
+                case 'complete':
+                  // Legacy support for old backend events
+                  finalResponse = {
+                    response: parsed.response || 'Process completed',
+                    metadata: parsed.metadata || {
+                      should_draft_claims: false,
+                      has_claims: false,
+                      reasoning: parsed.message || 'Process completed'
+                    },
+                    data: parsed.data,
+                    session_id: runResponse.session_id
+                  };
+                  
+                  // Handle different types of completions
+                  if (parsed.claims) {
+                    finalResponse.data = {
+                      ...finalResponse.data,
+                      claims: parsed.claims,
+                      num_claims: parsed.num_claims || parsed.claims.length
+                    };
+                    finalResponse.metadata.should_draft_claims = true;
+                    finalResponse.metadata.has_claims = true;
+                  }
+                  
+                  if (parsed.review_comments) {
+                    finalResponse.data = {
+                      ...finalResponse.data,
+                      review_comments: parsed.review_comments
+                    };
+                  }
+                  
+                  console.log('🎯 Final response prepared:', finalResponse);
+                  onChunk(parsed.response || 'Process completed', 'results');
+                  onComplete(finalResponse);
+                  return;
                   
                 case 'error':
                   const errorMsg = parsed.error || parsed.message || 'An error occurred';
@@ -337,83 +272,17 @@ class ApiService {
                   onChunk(`❓ ${clarificationMsg}`, 'low_confidence');
                   break;
                   
-                // Handle legacy event types for backward compatibility
-                case 'status':
-                  onChunk(parsed.message || 'Processing...', 'status');
-                  break;
-                  
-                case 'reasoning':
-                  onChunk(parsed.text || 'Analyzing...', 'reasoning');
-                  break;
-                  
-                case 'search_progress':
-                  if (parsed.step === 'searching') {
-                    onChunk('🔍 Searching patent databases...', 'search_progress');
-                  } else if (parsed.step === 'analyzing') {
-                    onChunk('📊 Analyzing search results...', 'search_progress');
-                  } else {
-                    onChunk(parsed.message || 'Searching...', 'search_progress');
-                  }
-                  break;
-                  
-                case 'report_progress':
-                  if (parsed.step === 'structuring') {
-                    onChunk('📋 Structuring the report...', 'report_progress');
-                  } else if (parsed.step === 'formatting') {
-                    onChunk('✨ Formatting content...', 'report_progress');
-                  } else {
-                    onChunk(parsed.message || 'Generating report...', 'report_progress');
-                  }
-                  break;
-                  
-                case 'tool_call':
-                  if (parsed.tool === 'draft_claims') {
-                    onChunk(`🛠️ Drafting ${parsed.num_claims || 'patent'} claims...`, 'tool_call');
-                  } else {
-                    onChunk(`🛠️ Using ${parsed.tool || 'tool'}...`, 'tool_call');
-                  }
-                  break;
-                  
-                case 'tool_result':
-                  if (parsed.tool === 'draft_claims' && parsed.success) {
-                    onChunk(`✅ Generated ${parsed.claims_generated || 'patent'} claims`, 'tool_result');
-                  } else {
-                    onChunk('✅ Tool execution completed', 'tool_result');
-                  }
-                  break;
-                  
-                case 'results':
-                  // Legacy results event
-                  finalResponse = {
-                    response: parsed.response || 'Process completed',
-                    metadata: parsed.metadata || {
-                      should_draft_claims: false,
-                      has_claims: false,
-                      reasoning: 'Process completed'
-                    },
-                    data: parsed.data,
-                    session_id: runResponse.session_id
-                  };
-                  onChunk(parsed.response || 'Results ready', 'results');
-                  break;
-                  
-                case 'done':
-                  // Legacy done event
-                  if (finalResponse) {
-                    finalResponse.session_id = runResponse.session_id;
-                    onComplete(finalResponse);
-                  }
-                  return;
-                  
                 default:
-                  // Handle unknown event types gracefully
-                  console.warn('⚠️ Unknown event type:', currentEventType, parsed);
+                  // Everything else is a "thought" - reasoning, progress, analysis, etc.
+                  console.log(`� Processing thought event (${currentEventType}):`, parsed);
                   
-                  if (parsed.text || parsed.message) {
-                    onChunk(parsed.text || parsed.message, 'unknown');
-                  } else if (parsed.response) {
-                    onChunk(parsed.response, 'unknown');
-                  }
+                  // Extract the meaningful text content
+                  const thoughtText = parsed.text || 
+                                    parsed.content || 
+                                    parsed.message || 
+                                    `${currentEventType}: Processing...`;
+                  
+                  onChunk(thoughtText, 'thoughts');
                   break;
               }
             } catch (parseError) {

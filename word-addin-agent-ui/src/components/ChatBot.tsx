@@ -16,9 +16,14 @@ export const ChatBot: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingResponse, setStreamingResponse] = useState('');
   const [streamingThoughts, setStreamingThoughts] = useState<string[]>([]);
+  const [streamingAnalysis, setStreamingAnalysis] = useState('');
   
-  // ADD THIS: useRef to maintain current thoughts reference
-  const currentThoughtsRef = useRef<string[]>([]);
+  // Fixed: Single ref for current streaming state
+  const streamingStateRef = useRef({
+    thoughts: [] as string[],
+    analysis: '',
+    response: ''
+  });
   
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -32,10 +37,14 @@ export const ChatBot: React.FC = () => {
   const backupRef = useRef<{ messages: ChatMessage[]; sessionId: string | null } | null>(null);
   const displayName = (user && (user.name || user.nickname)) ? (user.name || user.nickname) : null;
 
-  // ADD THIS: Sync state with ref whenever streamingThoughts changes
+  // Fixed: Sync all streaming states with ref
   useEffect(() => {
-    currentThoughtsRef.current = streamingThoughts;
-  }, [streamingThoughts]);
+    streamingStateRef.current = {
+      thoughts: streamingThoughts,
+      analysis: streamingAnalysis,
+      response: streamingResponse
+    };
+  }, [streamingThoughts, streamingAnalysis, streamingResponse]);
   
   // close profile menu on outside click or Escape
   useEffect(() => {
@@ -73,19 +82,20 @@ export const ChatBot: React.FC = () => {
     }
     setStreamingResponse('');
     setStreamingThoughts([]);
-    currentThoughtsRef.current = []; // CLEAR REF TOO
+    setStreamingAnalysis('');
+    streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
     setIsLoading(false);
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamingResponse, streamingThoughts]);
+  }, [messages, streamingResponse, streamingThoughts, streamingAnalysis]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
-    setError(null); // Clear previous errors
+    setError(null);
     
     const userMessage: ChatMessage = {
       role: 'user',
@@ -97,8 +107,9 @@ export const ChatBot: React.FC = () => {
     setInputValue('');
     setIsLoading(true);
     setStreamingResponse('');
-    setStreamingThoughts([]); // Clear previous thoughts
-    currentThoughtsRef.current = []; // CLEAR REF TOO
+    setStreamingThoughts([]);
+    setStreamingAnalysis('');
+    streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
 
     try {
       // Abort any previous in-flight request
@@ -116,7 +127,6 @@ export const ChatBot: React.FC = () => {
           documentContent = docContent.text || '';
         } catch (error) {
           console.warn('Failed to get document content:', error);
-          // Don't fail the request if document content can't be retrieved
         }
       }
       
@@ -137,124 +147,101 @@ export const ChatBot: React.FC = () => {
       // Use streaming API for real-time response
       await apiService.chatStream(
         request,
-        (chunk: string, eventType?: string) => { // ADD eventType parameter
+        (chunk: string, eventType?: string) => {
           // ignore updates if aborted
           if (abortControllerRef.current && abortControllerRef.current.signal.aborted) return;
           
-          console.log('🔍 STREAMING DEBUG: Chunk received:', {
+          console.log('🔍 STREAMING CHUNK:', {
             chunk: chunk.substring(0, 100) + (chunk.length > 100 ? '...' : ''),
-            chunkLength: chunk.length,
-            eventType, // LOG EVENT TYPE
-            currentThoughtsCount: streamingThoughts.length,
-            currentResponse: streamingResponse ? 'YES' : 'NO'
-          });
-          
-          // 🎯 CLEAN EVENT TYPE-BASED CLASSIFICATION
-          // Instead of guessing based on content/length, we use the eventType directly
-          // This ensures accurate classification of thoughts vs final results
-          const isThoughtEvent = (eventType: string | undefined): boolean => {
-            if (!eventType) return false;
-            
-            // All these event types represent intermediate thoughts/progress
-            const thoughtEventTypes = [
-              'intent_analysis',
-              'intent_classified', 
-              'prior_art_start',
-              'prior_art_progress',
-              'prior_art_complete',
-              'claims_drafting_start',
-              'claims_progress',
-              'claim_generated',  // Add this to show individual claims as thoughts
-              'claims_complete',
-              'review_start',
-              'review_progress',
-              'review_complete',
-              'processing',
-              'low_confidence'
-            ];
-            
-            return thoughtEventTypes.includes(eventType);
-          };
-          
-          const isThoughtChunk = isThoughtEvent(eventType);
-          const isFinalResult = eventType === 'complete';
-          const isErrorEvent = eventType === 'error';
-          
-          console.log('🔍 EVENT TYPE DETECTION DEBUG:', {
             eventType,
-            isThoughtChunk,
-            isFinalResult,
-            isErrorEvent,
-            chunk: chunk.substring(0, 100) + (chunk.length > 100 ? '...' : '')
+            timestamp: new Date().toISOString()
           });
           
-          if (isThoughtChunk) {
-            console.log('✅ Adding to thoughts based on event type:', eventType);
+          // Simplified: Just two types - thoughts and results!
+          const isThoughtEvent = eventType === 'thoughts';
+          const isFinalResult = eventType === 'results';
+          const isErrorEvent = eventType === 'error' || eventType === 'low_confidence';
+          
+          if (isThoughtEvent) {
+            // Add all thoughts to the thoughts array - simple accumulation
             setStreamingThoughts(prev => {
               const newThoughts = [...prev, chunk];
-              currentThoughtsRef.current = newThoughts;
-              console.log('📝 Updated thoughts array:', newThoughts.map(t => t.substring(0, 30) + '...'));
+              streamingStateRef.current.thoughts = newThoughts;
               return newThoughts;
             });
-            
-            // Clear any previous response when new thoughts come in
+            // Clear any existing response when new thoughts come in
             if (streamingResponse) {
               setStreamingResponse('');
+              streamingStateRef.current.response = '';
             }
           } else if (isFinalResult) {
-            console.log('🎯 Setting as main response based on event type:', eventType);
+            // Set final response
             setStreamingResponse(chunk);
-            // Keep streamingThoughts intact so they're preserved in the final message
+            streamingStateRef.current.response = chunk;
           } else if (isErrorEvent) {
-            console.log('❌ Handling error event:', eventType);
-            // Add error to thoughts but mark it as an error
+            // Add error to thoughts
             setStreamingThoughts(prev => {
-              const newThoughts = [...prev, `❌ ${chunk}`];
-              currentThoughtsRef.current = newThoughts;
+              const errorMsg = `❌ ${chunk}`;
+              const newThoughts = [...prev, errorMsg];
+              streamingStateRef.current.thoughts = newThoughts;
               return newThoughts;
             });
           } else {
-            // For any other unknown event types, add to thoughts with event type prefix
-            console.log('ℹ️ Adding unknown event to thoughts:', eventType);
+            // Unknown event - add to thoughts with prefix
+            const prefixedChunk = eventType ? `[${eventType}] ${chunk}` : chunk;
             setStreamingThoughts(prev => {
-              const newThoughts = [...prev, `[${eventType}] ${chunk}`];
-              currentThoughtsRef.current = newThoughts;
+              const newThoughts = [...prev, prefixedChunk];
+              streamingStateRef.current.thoughts = newThoughts;
               return newThoughts;
             });
           }
         },
         (response) => {
-          // FIXED: Use ref instead of stale state
-          const capturedThoughts = [...currentThoughtsRef.current];
-          console.log('Creating assistant message with captured thoughts:', capturedThoughts);
+          // Fixed: Use current ref state for final message
+          const currentState = streamingStateRef.current;
           
-          // Handle complete response - create final message with thoughts
+          console.log('Creating final message with state:', {
+            thoughtsCount: currentState.thoughts.length,
+            hasAnalysis: !!currentState.analysis,
+            hasResponse: !!currentState.response
+          });
+          
+          // Combine all thoughts
+          const allThoughts = [...currentState.thoughts];
+          if (currentState.analysis) {
+            allThoughts.push(`🔍 Analysis: ${currentState.analysis}`);
+          }
+          
+          // Clean up thoughts - remove empty ones
+          const cleanedThoughts = allThoughts.filter(thought => thought.trim());
+          
           const assistantMessage: ChatMessage = {
             role: 'assistant',
             content: response.response,
             timestamp: new Date().toISOString(),
-            // Use captured thoughts and only add if we have them
-            thoughts: capturedThoughts.length > 0 ? capturedThoughts : undefined,
+            thoughts: cleanedThoughts.length > 0 ? cleanedThoughts : undefined,
           };
           
-          console.log('Final assistant message:', assistantMessage);
-          console.log('Message thoughts count:', assistantMessage.thoughts?.length || 0);
+          console.log('Final message created:', {
+            contentLength: assistantMessage.content.length,
+            thoughtsCount: assistantMessage.thoughts?.length || 0
+          });
+          
           addMessage(assistantMessage);
           
-          // Clear streaming state AFTER creating the message
+          // Clear all streaming state
           setStreamingResponse('');
           setStreamingThoughts([]);
-          currentThoughtsRef.current = []; // CLEAR REF TOO
+          setStreamingAnalysis('');
+          streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
           
           // Update session ID if provided
           if (response.session_id) {
             updateSessionId(response.session_id);
           }
           
-          // Reset retry count on success
           setRetryCount(0);
           
-          // Log metadata for debugging
           console.log('Response metadata:', response.metadata);
           if (response.data?.claims) {
             console.log('Generated claims:', response.data.claims);
@@ -262,17 +249,14 @@ export const ChatBot: React.FC = () => {
         },
         (error) => {
           if (error && (error.name === 'AbortError' || String(error).includes('aborted'))) {
-            // aborted by user or cleanup; do not show error
             return;
           }
           
           console.error('Chat error:', error);
           
-          // Handle retry logic
           if (retryCount < maxRetries) {
             setRetryCount(prev => prev + 1);
             setError(`Request failed. Retrying... (${retryCount + 1}/${maxRetries})`);
-            // Could implement auto-retry here
           } else {
             setError('Request failed after multiple attempts. Please try again.');
             const errorMessage: ChatMessage = {
@@ -286,7 +270,8 @@ export const ChatBot: React.FC = () => {
           // Clean up streaming state on error
           setStreamingResponse('');
           setStreamingThoughts([]);
-          currentThoughtsRef.current = []; // CLEAR REF TOO
+          setStreamingAnalysis('');
+          streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
         },
         abortControllerRef.current.signal
       );
@@ -303,9 +288,9 @@ export const ChatBot: React.FC = () => {
       // Clean up streaming state on error
       setStreamingResponse('');
       setStreamingThoughts([]);
-      currentThoughtsRef.current = []; // CLEAR REF TOO
+      setStreamingAnalysis('');
+      streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
     } finally {
-      // cleanup controller but keep streaming state until completion
       if (abortControllerRef.current) {
         abortControllerRef.current = null;
       }
@@ -321,7 +306,10 @@ export const ChatBot: React.FC = () => {
   // ensure undo timer cleaned up on unmount
   useEffect(() => {
     return () => {
-      if (undoTimerRef.current) { window.clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+      if (undoTimerRef.current) { 
+        window.clearTimeout(undoTimerRef.current); 
+        undoTimerRef.current = null; 
+      }
     };
   }, []);
 
@@ -332,8 +320,6 @@ export const ChatBot: React.FC = () => {
     }
 
     try {
-      // Keep the original HTML content for proper formatting
-      // The InsertButton component will handle HTML insertion properly
       await documentService.insertText(content);
     } catch (error) {
       console.error('Error inserting content:', error);
@@ -341,21 +327,23 @@ export const ChatBot: React.FC = () => {
   };
 
   const handleClearChat = () => {
-    // Backup current conversation to allow undo
     try {
       backupRef.current = { messages: [...messages], sessionId };
-    } catch (e) { backupRef.current = null; }
+    } catch (e) { 
+      backupRef.current = null; 
+    }
 
-    cleanup(); // Stop any ongoing requests
-    clearConversation(); // Clear the conversation history
+    cleanup();
+    clearConversation();
     setError(null);
     setRetryCount(0);
 
-    // Show undo toast for 5 seconds
     setShowUndoToast(true);
-    if (undoTimerRef.current) { window.clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+    if (undoTimerRef.current) { 
+      window.clearTimeout(undoTimerRef.current); 
+      undoTimerRef.current = null; 
+    }
     undoTimerRef.current = window.setTimeout(() => {
-      // expire backup
       backupRef.current = null;
       setShowUndoToast(false);
       undoTimerRef.current = null;
@@ -364,16 +352,19 @@ export const ChatBot: React.FC = () => {
 
   const handleUndoClear = () => {
     if (backupRef.current) {
-      // restore
       const b = backupRef.current;
       try {
-        // add messages back
         b.messages.forEach(m => addMessage(m));
         if (b.sessionId) updateSessionId(b.sessionId);
-      } catch (e) { console.warn('Failed to restore conversation backup', e); }
+      } catch (e) { 
+        console.warn('Failed to restore conversation backup', e); 
+      }
       backupRef.current = null;
     }
-    if (undoTimerRef.current) { window.clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+    if (undoTimerRef.current) { 
+      window.clearTimeout(undoTimerRef.current); 
+      undoTimerRef.current = null; 
+    }
     setShowUndoToast(false);
   };
 
@@ -413,7 +404,6 @@ export const ChatBot: React.FC = () => {
           </div>
         </div>
         <div className="header-buttons">
-          {/* Profile / avatar menu */}
           <div className="profile-menu-container" ref={(el) => profileMenuRef.current = el}>
             <button
               className="profile-button"
@@ -462,27 +452,6 @@ export const ChatBot: React.FC = () => {
       )}
 
       <div className="messages-container">
-        {/* Global debug panel */}
-        <div style={{
-          position: 'fixed', 
-          top: '10px', 
-          right: '10px', 
-          padding: '10px', 
-          backgroundColor: 'rgba(0,0,0,0.8)', 
-          color: 'white', 
-          borderRadius: '8px',
-          fontSize: '12px',
-          zIndex: 9999,
-          maxWidth: '300px'
-        }}>
-          <strong>🔍 GLOBAL STATE DEBUG:</strong><br/>
-          • isLoading: {isLoading.toString()}<br/>
-          • streamingThoughts.length: {streamingThoughts.length}<br/>
-          • streamingResponse: {streamingResponse ? 'YES (' + streamingResponse.length + ')' : 'NO'}<br/>
-          • Should show loading: {(isLoading && !streamingResponse && streamingThoughts.length === 0).toString()}<br/>
-          • Should show thoughts: {(streamingThoughts.length > 0).toString()}
-        </div>
-        
         {messages.length === 0 && (
           <div className="welcome-message">
             <div className="welcome-content">
@@ -507,40 +476,42 @@ export const ChatBot: React.FC = () => {
           />
         ))}
         
-        {/* Show streaming thoughts immediately when they arrive */}
-        {streamingThoughts.length > 0 && (
+        {/* Fixed: Show streaming content when available */}
+        {(streamingThoughts.length > 0 || streamingAnalysis || streamingResponse) && (
           <div className="message assistant">
             <div className="message-content streaming-message">
-              {/* Enhanced debug info */}
-              <div style={{fontSize: '12px', color: '#666', marginBottom: '10px', padding: '8px', backgroundColor: '#f0f0f0', borderRadius: '4px'}}>
-                <strong>🔍 STREAMING THOUGHTS CONTAINER:</strong><br/>
-                • Thoughts Count: {streamingThoughts.length}<br/>
-                • Has Response: {streamingResponse ? 'YES' : 'NO'}<br/>
-                • Response Length: {streamingResponse ? streamingResponse.length : 0}<br/>
-                • Latest Thought: {streamingThoughts.length > 0 ? streamingThoughts[streamingThoughts.length - 1].substring(0, 50) + '...' : 'None'}<br/>
-                • Container: THOUGHTS ACTIVE
-              </div>
-              
               {/* Show streaming thoughts during processing */}
-              <div className="streaming-thoughts">
-                <div className="streaming-thoughts-header">
-                  <span className="thoughts-icon">💭</span>
-                  <span>AI is thinking... ({streamingThoughts.length} thoughts)</span>
-                </div>
-                <div className="streaming-thoughts-content">
-                  {streamingThoughts.map((thought, index) => (
-                    <div key={index} className="streaming-thought-item">
-                      <strong>Thought {index + 1}:</strong> {thought}
+              {streamingThoughts.length > 0 && (
+                <div className="streaming-thoughts">
+                  <div className="streaming-thoughts-header">
+                    <span className="thoughts-icon">💭</span>
+                    <span>AI is thinking... ({streamingThoughts.length} thoughts)</span>
+                  </div>
+                  <div className="streaming-thoughts-content">
+                    {/* Show accumulated streaming analysis if available */}
+                    {streamingAnalysis && (
+                      <div className="streaming-analysis-item">
+                        <strong>🔍 Invention Analysis:</strong>
+                        <div className="analysis-text">
+                          {streamingAnalysis}
+                          <span className="typing-indicator">▋</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Show other thoughts as flowing text */}
+                    <div className="streaming-thoughts-flowing">
+                      {streamingThoughts.join(' ')}
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
+              )}
               
-              {/* Show final streaming response BELOW thoughts */}
+              {/* Show final streaming response */}
               {streamingResponse && (
                 <div className="streaming-response">
                   <div className="streaming-content">
-                    <strong>Final Response:</strong> {streamingResponse}
+                    <div>{streamingResponse}</div>
                     <span className="typing-indicator">▋</span>
                   </div>
                 </div>
@@ -559,17 +530,9 @@ export const ChatBot: React.FC = () => {
         )}
 
         {/* Show loading indicator when no streaming content yet */}
-        {isLoading && !streamingResponse && streamingThoughts.length === 0 && (
+        {isLoading && !streamingResponse && streamingThoughts.length === 0 && !streamingAnalysis && (
           <div className="message assistant">
             <div className="message-content loading-message">
-              {/* Debug info for loading container */}
-              <div style={{fontSize: '12px', color: '#666', marginBottom: '10px', padding: '8px', backgroundColor: '#ffe0e0', borderRadius: '4px'}}>
-                <strong>🔍 LOADING CONTAINER:</strong><br/>
-                • isLoading: {isLoading.toString()}<br/>
-                • streamingResponse: {streamingResponse ? 'YES' : 'NO'}<br/>
-                • streamingThoughts.length: {streamingThoughts.length}<br/>
-                • Container: LOADING ACTIVE
-              </div>
               <div className="loading-indicator">
                 <div className="typing-dots">
                   <span></span>
