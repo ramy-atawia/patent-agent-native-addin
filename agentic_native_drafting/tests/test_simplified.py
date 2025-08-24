@@ -8,7 +8,7 @@ import sys
 import os
 
 # Add the src directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from prior_art_search_simplified import SimplifiedPatentSearchEngine
 

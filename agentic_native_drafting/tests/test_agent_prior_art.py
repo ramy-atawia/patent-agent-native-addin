@@ -78,14 +78,25 @@ class AgentPriorArtTester:
                 
                 if response.status_code == 200:
                     data = response.json()
-                    print(f"📥 Patent API response received")
+                    print(f"📥 Patent API response received - Run ID: {data.get('run_id')}")
                     
-                    return {
-                        "success": True,
-                        "response": data,
-                        "data": data,
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    # Now stream the results to get the actual patent report
+                    run_id = data.get('run_id')
+                    if run_id:
+                        stream_response = await self.get_streaming_results(run_id)
+                        return {
+                            "success": True,
+                            "response": stream_response.get("final_response", ""),
+                            "data": {**data, **stream_response},
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    else:
+                        return {
+                            "success": True,
+                            "response": data,
+                            "data": data,
+                            "timestamp": datetime.now().isoformat()
+                        }
                 else:
                     print(f"❌ Patent API request failed: {response.status_code}")
                     print(f"Response: {response.text}")
@@ -103,6 +114,74 @@ class AgentPriorArtTester:
                 "timestamp": datetime.now().isoformat()
             }
     
+    async def get_streaming_results(self, run_id: str) -> dict:
+        """Get the streaming results from a run"""
+        try:
+            print(f"🔄 Streaming results for run {run_id}...")
+            
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                async with client.stream(
+                    'GET',
+                    f"{self.backend_url}/api/patent/stream?run_id={run_id}",
+                    headers={"Accept": "text/event-stream"}
+                ) as response:
+                    if response.status_code != 200:
+                        return {"error": f"Stream failed: {response.status_code}"}
+                    
+                    events_received = 0
+                    final_response = ""
+                    all_events = []
+                    debug_events = []  # For debugging
+                    
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            try:
+                                event_data = json.loads(line[6:])  # Remove "data: " prefix
+                                events_received += 1
+                                all_events.append(event_data)
+                                debug_events.append(event_data)  # Store for debugging
+                                
+                                event_type = event_data.get("type", event_data.get("event_type", "unknown"))
+                                print(f"📨 Event {events_received}: {event_type}")
+                                
+                                # Look for the final response in completion events
+                                if event_type in ["complete", "completion", "results", "RESULTS", "COMPLETION"]:
+                                    response_content = event_data.get("response", event_data.get("data", {}).get("response", ""))
+                                    if response_content and len(response_content) > len(final_response):
+                                        final_response = response_content
+                                        print(f"🎯 Found final response: {len(response_content)} characters")
+                                        
+                                # Also check for any response content in any event type
+                                elif "response" in event_data:
+                                    response_content = event_data.get("response", "")
+                                    if response_content and len(response_content) > len(final_response):
+                                        final_response = response_content
+                                        print(f"📄 Found response content: {len(response_content)} characters")
+                                        
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️ Failed to parse event: {e}")
+                                continue
+                    
+                    print(f"✅ Streaming completed - {events_received} events received")
+                    print(f"📄 Final response length: {len(final_response)} characters")
+                    
+                    # Debug: Print first few events to see structure
+                    if debug_events and len(final_response) == 0:
+                        print("🔍 DEBUG: First few events:")
+                        for i, event in enumerate(debug_events[:3]):
+                            print(f"   Event {i+1}: {json.dumps(event, indent=2)[:200]}...")
+                    
+                    return {
+                        "final_response": final_response,
+                        "events_received": events_received,
+                        "all_events": all_events,
+                        "debug_events": debug_events[:5] if len(final_response) == 0 else []  # Include debug info if no response
+                    }
+                    
+        except Exception as e:
+            print(f"❌ Streaming failed: {e}")
+            return {"error": str(e)}
+    
     async def save_report(self, query: str, response_data: dict, test_index: int) -> str:
         """Save the patent report to a file"""
         try:
@@ -113,8 +192,9 @@ class AgentPriorArtTester:
             filename = f"prior_art_report_{test_index}_{safe_query}_{timestamp}.md"
             filepath = self.reports_dir / filename
             
-            # Extract report content
-            agent_response = response_data.get("response", "")
+            # Extract the actual patent report content from streaming response
+            final_response = response_data.get("response", "")
+            events_received = response_data.get("data", {}).get("events_received", 0)
             
             # Create comprehensive report file
             report_content = f"""# Prior Art Search Test Report
@@ -125,13 +205,15 @@ class AgentPriorArtTester:
 - **Timestamp**: {response_data.get('timestamp', 'Unknown')}
 - **Session ID**: {self.session_id}
 - **Backend URL**: {self.backend_url}
+- **Events Received**: {events_received}
 
-## Agent Response
-{agent_response}
+## Agent Prior Art Search Results
 
-## Raw Response Data
+{final_response if final_response else "No final response received from agent"}
+
+## Raw Response Metadata
 ```json
-{json.dumps(response_data.get('data', {}), indent=2)}
+{json.dumps({k: v for k, v in response_data.get('data', {}).items() if k != 'all_events'}, indent=2)}
 ```
 
 ---
@@ -143,6 +225,7 @@ Generated by Agent Prior Art Tester
                 f.write(report_content)
             
             print(f"💾 Report saved: {filepath}")
+            print(f"📄 Report content length: {len(final_response)} characters")
             return str(filepath)
             
         except Exception as e:

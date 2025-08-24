@@ -5,30 +5,30 @@
 - **Successful**: 2
 - **Failed**: 0
 - **Success Rate**: 100.0%
-- **Average Duration**: 103.3 seconds
-- **Test Date**: 2025-08-22T23:56:43.654987
+- **Average Duration**: 49.6 seconds
+- **Test Date**: 2025-08-23T13:39:25.776006
 - **Backend URL**: http://localhost:8000
 
 ## Test Results
 
 ### Test 1: ✅ PASSED
 - **Query**: 5G dynamic spectrum sharing
-- **Duration**: 136.8 seconds
-- **Patents Found**: 20
-- **Report Path**: test_reports/direct_api_report_1_5G_dynamic_spectrum_sharing_20250822_235530.md
+- **Duration**: 72.6 seconds
+- **Patents Found**: 13
+- **Report Path**: test_reports/direct_api_report_1_5G_dynamic_spectrum_sharing_20250823_133859.md
 
 ### Test 2: ✅ PASSED
 - **Query**: AI for carrier aggregation
-- **Duration**: 69.9 seconds
-- **Patents Found**: 10
-- **Report Path**: test_reports/direct_api_report_2_AI_for_carrier_aggregation_20250822_235643.md
+- **Duration**: 26.6 seconds
+- **Patents Found**: 1
+- **Report Path**: test_reports/direct_api_report_2_AI_for_carrier_aggregation_20250823_133925.md
 
 ## Performance Analysis
 
-- **Fastest Search**: 69.9 seconds
-- **Slowest Search**: 136.8 seconds
-- **Total Patents Found**: 30
-- **Average Patents per Query**: 15.0
+- **Fastest Search**: 26.6 seconds
+- **Slowest Search**: 72.6 seconds
+- **Total Patents Found**: 14
+- **Average Patents per Query**: 7.0
 
 
 ## API Endpoint Used
