@@ -96,7 +96,7 @@ class PatentSearchConfig:
     default_relevance_threshold: float = DEFAULT_RELEVANCE_THRESHOLD
     default_max_results: int = DEFAULT_MAX_RESULTS
     batch_size: int = DEFAULT_BATCH_SIZE
-    timeout: float = DEFAULT_TIMEOUT
+    timeout: float = 120.0  # Increased from 30.0 to 120.0 for report generation
 
 class EnhancedPatentsViewAPI:
     """Enhanced PatentsView API client with proper async support"""
@@ -109,7 +109,7 @@ class EnhancedPatentsViewAPI:
         
     async def __aenter__(self):
         """Async context manager entry"""
-        self.session = httpx.AsyncClient(timeout=self.config.timeout)
+        self.session = httpx.AsyncClient(timeout=httpx.Timeout(self.config.timeout))
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -290,7 +290,7 @@ class EnhancedPatentsViewAPI:
             except Exception as e:
                 logger.warning(f"Error parsing claim: {e}")
                 continue
-                
+        
         return claims
 
 class SimplifiedQueryGenerator:
@@ -305,7 +305,7 @@ class SimplifiedQueryGenerator:
         try:
             # Load prompt from external file
             prompt = prompt_loader.load_prompt("search_strategy_generation", user_query=user_query)
-
+            
             response = await self._call_llm(prompt)
             
             # Clean and parse response
@@ -414,8 +414,8 @@ class SimplifiedPatentAnalyzer:
             logger.error(f"Relevance check failed: {e}")
             return 0.0
     
-    async def analyze_patent_simple(self, patent_data: Dict, search_query: str) -> SimplePatentAnalysis:
-        """Create simplified patent analysis"""
+    async def analyze_patent_simple(self, patent_data: Dict, search_query: str, claims: List[PatentClaim] = None) -> SimplePatentAnalysis:
+        """Create simplified patent analysis with optional pre-fetched claims"""
         try:
             # Extract basic info
             patent_id = patent_data.get("patent_id", "")
@@ -426,12 +426,15 @@ class SimplifiedPatentAnalyzer:
             inventors = self._extract_inventors(patent_data.get("inventors", []))
             assignees = self._extract_assignees(patent_data.get("assignees", []))
             
-            # Get claims
-            async with EnhancedPatentsViewAPI(self.config) as api:
-                claims = await api.get_patent_claims_async(patent_id)
+            # Use provided claims or fetch them if not provided
+            if claims is None:
+                async with EnhancedPatentsViewAPI(self.config) as api:
+                    claims = await api.get_patent_claims_async(patent_id)
             
-            # Get relevance score
-            relevance_score = await self.check_relevance(patent_data, search_query)
+            # Get relevance score (should be passed in from previous step)
+            relevance_score = patent_data.get("relevance_score", 0.0)
+            if relevance_score == 0.0:
+                relevance_score = await self.check_relevance(patent_data, search_query)
             
             return SimplePatentAnalysis(
                 patent_id=patent_id,
@@ -474,7 +477,7 @@ class SimplifiedPatentAnalyzer:
             except Exception:
                 continue
         return assignees
-
+    
     async def _call_llm(self, prompt: str) -> str:
         """Simple LLM call"""
         try:
@@ -545,22 +548,30 @@ SEARCH METADATA:
 - Generated: {search_result.timestamp}
 """
             
-            # Prepare claims summaries for ALL patents at once
+            # Prepare claims summaries for ALL patents at once - ENHANCED with LLM-based claims analysis
             claims_summaries = []
             for patent in top_patents:
-                # Get key claims text (first 3 independent claims)
-                key_claims = []
-                for claim in patent.claims[:5]:
-                    if len(key_claims) < 3 and "dependent" not in claim.claim_type.lower():
-                        key_claims.append(f"Claim {claim.claim_number}: {claim.claim_text[:200]}")
+                # Use LLM to analyze claims intelligently
+                claims_analysis = await self._analyze_claims_with_llm(
+                    patent.claims, 
+                    patent.title, 
+                    search_result.query
+                )
                 
-                claims_text = " | ".join(key_claims) if key_claims else "No key claims found"
+                # Add comprehensive claims data with LLM insights
+                logger.debug(f"Patent {patent.patent_id}: {len(patent.claims)} total claims, LLM analysis completed")
+                
                 claims_summaries.append({
                     "patent_id": patent.patent_id,
-                    "title": patent.title[:100],
+                    "title": patent.title[:120],
                     "assignees": ", ".join(patent.assignees[:2]),
-                    "relevance": patent.relevance_score,
-                    "key_claims": claims_text
+                    "relevance": round(patent.relevance_score, 2),
+                    "claims_analysis": claims_analysis,
+                    "claims_stats": {
+                        "total_claims": len(patent.claims),
+                        "independent_claims": len([c for c in patent.claims if c.claim_type == "independent"]),
+                        "dependent_claims": len([c for c in patent.claims if c.claim_type == "dependent"])
+                    }
                 })
             
             # ONE comprehensive LLM call for the entire report
@@ -592,6 +603,109 @@ SEARCH METADATA:
         except Exception as e:
             logger.error(f"Report generation failed: {e}")
             raise
+    
+    async def _analyze_claims_with_llm(self, patent_claims: List[PatentClaim], patent_title: str, search_query: str) -> Dict[str, Any]:
+        """Use LLM to intelligently analyze and summarize patent claims"""
+        if not patent_claims:
+            return {
+                "claims_summary": "No claims available for analysis",
+                "technical_scope": "Unknown",
+                "key_innovations": [],
+                "blocking_potential": "Low",
+                "main_claim_focus": "Not available"
+            }
+        
+        # Prepare claims text for LLM analysis
+        independent_claims = [c for c in patent_claims if c.claim_type == "independent"]
+        dependent_claims = [c for c in patent_claims if c.claim_type == "dependent"]
+        
+        # Focus on top independent claims and some representative dependent claims
+        claims_for_analysis = []
+        
+        # Add independent claims (limit to top 3 for focused analysis)
+        for i, claim in enumerate(independent_claims[:3]):
+            claims_for_analysis.append({
+                "claim_number": claim.claim_number,
+                "claim_type": "independent",
+                "claim_text": claim.claim_text[:400],  # Limit for LLM efficiency
+                "priority": "high" if i == 0 else "medium"
+            })
+        
+        # Add some dependent claims for scope understanding (limit to 3)
+        for claim in dependent_claims[:3]:
+            claims_for_analysis.append({
+                "claim_number": claim.claim_number,
+                "claim_type": "dependent",
+                "claim_text": claim.claim_text[:300],
+                "dependency": claim.dependency,
+                "priority": "low"
+            })
+        
+        # Create prompt for LLM analysis
+        claims_text = json.dumps(claims_for_analysis, indent=2)
+        
+        prompt = f"""Analyze the following patent claims and provide a comprehensive summary.
+
+PATENT TITLE: {patent_title}
+SEARCH CONTEXT: {search_query}
+TOTAL CLAIMS: {len(patent_claims)} ({len(independent_claims)} independent, {len(dependent_claims)} dependent)
+
+CLAIMS TO ANALYZE:
+{claims_text}
+
+Please provide a JSON response with the following structure:
+{{
+    "claims_summary": "Brief 2-3 sentence summary of what this patent covers",
+    "technical_scope": "Primary technical area and scope of protection",
+    "key_innovations": ["Innovation 1", "Innovation 2", "Innovation 3"],
+    "blocking_potential": "High/Medium/Low - with brief reasoning",
+    "main_claim_focus": "Primary focus of the main independent claim",
+    "claim_breadth": "Broad/Narrow - assessment of claim scope",
+    "differentiation_factors": ["Factor 1", "Factor 2"]
+}}
+
+Focus on technical substance, not legal language. Provide practical insights for IP strategy."""
+        
+        try:
+            response = await self._call_llm(prompt)
+            
+            # Parse the LLM response
+            try:
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response[7:]
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3]
+                cleaned_response = cleaned_response.strip()
+                
+                analysis = json.loads(cleaned_response)
+                return analysis
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse LLM claims analysis response: {e}")
+                # Fallback to basic analysis
+                return {
+                    "claims_summary": f"Patent with {len(patent_claims)} claims related to {search_query}",
+                    "technical_scope": "Unable to analyze - parsing error",
+                    "key_innovations": ["Analysis unavailable"],
+                    "blocking_potential": "Medium",
+                    "main_claim_focus": independent_claims[0].claim_text[:100] if independent_claims else "No independent claims",
+                    "claim_breadth": "Unknown",
+                    "differentiation_factors": ["Analysis unavailable"]
+                }
+            
+        except Exception as e:
+            logger.error(f"LLM claims analysis failed: {e}")
+            # Fallback to basic summary
+            return {
+                "claims_summary": f"Patent with {len(patent_claims)} claims ({len(independent_claims)} independent)",
+                "technical_scope": patent_title[:100],
+                "key_innovations": ["LLM analysis unavailable"],
+                "blocking_potential": "Medium",
+                "main_claim_focus": independent_claims[0].claim_text[:100] if independent_claims else "No independent claims",
+                "claim_breadth": "Broad" if len(patent_claims) > 20 else "Narrow",
+                "differentiation_factors": ["Analysis unavailable"]
+            }
     
     @observe(name="simple_report_llm_call")
     async def _call_llm(self, prompt: str) -> str:
@@ -636,6 +750,11 @@ class SimplifiedPatentSearchEngine:
     
     def __init__(self, config: Optional[PatentSearchConfig] = None):
         self.config = config or PatentSearchConfig()
+        
+        # Validate essential configuration
+        if not self.config.azure_endpoint or not self.config.azure_api_key:
+            raise ValueError("Azure OpenAI configuration missing. Check AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY environment variables.")
+        
         self.query_generator = SimplifiedQueryGenerator(self.config)
         self.analyzer = SimplifiedPatentAnalyzer(self.config)
         self.report_generator = SimplifiedReportGenerator(self.config)
@@ -682,35 +801,66 @@ class SimplifiedPatentSearchEngine:
             duplicates_removed = total_api_patents - len(patent_list)
             logger.info(f"After deduplication: {len(patent_list)} unique patents (removed {duplicates_removed} duplicates)")
             
-            # 4. Simple parallel relevance filtering
+            # 4. Relevance filtering with claims retrieval
             relevant_patents = []
             batch_size = self.config.batch_size
             
+            logger.info(f"Starting relevance analysis for {len(patent_list)} unique patents...")
+            
             for i in range(0, len(patent_list), batch_size):
                 batch = patent_list[i:i + batch_size]
-                tasks = [self.analyzer.check_relevance(patent, query) for patent in batch]
-                scores = await asyncio.gather(*tasks)
                 
+                # Get relevance scores
+                relevance_tasks = [self.analyzer.check_relevance(patent, query) for patent in batch]
+                scores = await asyncio.gather(*relevance_tasks)
+                
+                # Filter by relevance threshold first
                 for patent, score in zip(batch, scores):
                     if score >= relevance_threshold:
                         relevant_patents.append((patent, score))
             
+            logger.info(f"Found {len(relevant_patents)} patents above relevance threshold {relevance_threshold}")
+            
             logger.info(f"Found {len(relevant_patents)} relevant patents above threshold {relevance_threshold}")
             
-            # 5. Sort and limit
+            # 5. Sort by relevance and limit results
             relevant_patents.sort(key=lambda x: x[1], reverse=True)
             top_relevant = relevant_patents[:max_results]
             
-            # 6. Full analysis with claims for top patents only
-            analyzed_patents = []
-            for patent_data, score in top_relevant:
-                try:
-                    analysis = await self.analyzer.analyze_patent_simple(patent_data, query)
-                    analyzed_patents.append(analysis)
-                except Exception as e:
-                    logger.error(f"Failed to analyze patent {patent_data.get('patent_id')}: {e}")
+            logger.info(f"Processing top {len(top_relevant)} patents for claims retrieval and full analysis")
             
-            logger.info(f"Completed analysis for {len(analyzed_patents)} patents")
+            # 6. Fetch claims for top relevant patents
+            analyzed_patents = []
+            async with EnhancedPatentsViewAPI(self.config) as api:
+                for patent_data, relevance_score in top_relevant:
+                    try:
+                        patent_id = patent_data.get("patent_id", "")
+                        
+                        # Fetch claims for this patent
+                        claims = await api.get_patent_claims_async(patent_id)
+                        
+                        # Add debugging info
+                        logger.info(f"Patent {patent_id}: Retrieved {len(claims)} claims from PatentsView API")
+                        if claims:
+                            independent_count = len([c for c in claims if c.claim_type == "independent"])
+                            dependent_count = len([c for c in claims if c.claim_type == "dependent"])
+                            logger.info(f"  - Independent claims: {independent_count}")
+                            logger.info(f"  - Dependent claims: {dependent_count}")
+                        
+                        # Add relevance score to patent data for analysis
+                        patent_data["relevance_score"] = relevance_score
+                        
+                        # Create full analysis with claims
+                        analysis = await self.analyzer.analyze_patent_simple(patent_data, query, claims)
+                        analyzed_patents.append(analysis)
+                        
+                        logger.debug(f"Analyzed patent {patent_id}: {len(claims)} claims, relevance {relevance_score:.3f}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to analyze patent {patent_data.get('patent_id')}: {e}")
+                        continue
+            
+            logger.info(f"Completed full analysis for {len(analyzed_patents)} patents with claims")
             
             # 7. Create search result
             search_result = SearchResult(

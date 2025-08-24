@@ -1,0 +1,33 @@
+Analyze the following patent claims and provide a comprehensive summary for IP strategy decisions.
+
+PATENT TITLE: {patent_title}
+SEARCH CONTEXT: {search_query}
+TOTAL CLAIMS: {total_claims} ({independent_claims} independent, {dependent_claims} dependent)
+
+CLAIMS TO ANALYZE:
+{claims_data}
+
+Please provide a JSON response with the following structure:
+{{
+    "claims_summary": "Brief 2-3 sentence summary of what this patent covers",
+    "technical_scope": "Primary technical area and scope of protection",
+    "key_innovations": ["Innovation 1", "Innovation 2", "Innovation 3"],
+    "blocking_potential": "High/Medium/Low - with brief reasoning",
+    "main_claim_focus": "Primary focus of the main independent claim",
+    "claim_breadth": "Broad/Narrow - assessment of claim scope",
+    "differentiation_factors": ["Factor 1", "Factor 2"]
+}}
+
+ANALYSIS REQUIREMENTS:
+- Focus on technical substance, not legal language
+- Provide practical insights for IP strategy
+- Consider the search context when evaluating relevance
+- Assess blocking potential based on claim scope and novelty
+- Identify key technical differentiators for design-around strategies
+- Evaluate claim breadth for enforcement and validity considerations
+
+OUTPUT FORMAT:
+- Return only valid JSON
+- Be concise but informative
+- Focus on actionable intelligence
+- Consider competitive landscape implications

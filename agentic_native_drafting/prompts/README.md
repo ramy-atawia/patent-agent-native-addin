@@ -32,6 +32,30 @@ This folder contains the LLM prompts used by the patent search system, extracted
 **Variables**:
 - `{query}`: The search query (string)
 - `{total_patents}`: Number of patents analyzed (integer)
+- `{patent_inventory}`: JSON-formatted patent data with claims analysis
+
+**Usage**: Used by `SimplifiedReportGenerator.generate_report()`
+
+---
+
+### 4. `claims_analysis.txt`
+**Purpose**: Provides intelligent LLM-based analysis of patent claims for IP strategy decisions.
+
+**Variables**:
+- `{patent_title}`: The patent title (string)
+- `{search_query}`: The search context/query (string)
+- `{total_claims}`: Total number of claims (integer)
+- `{independent_claims}`: Number of independent claims (integer)
+- `{dependent_claims}`: Number of dependent claims (integer)
+- `{claims_data}`: JSON-formatted claims data with text and metadata
+
+**Usage**: Used by `SimplifiedReportGenerator._analyze_claims_with_llm()`
+
+**Output**: JSON structure with claims summary, technical scope, key innovations, blocking potential, claim breadth, and differentiation factors.
+
+**Variables**:
+- `{query}`: The search query (string)
+- `{total_patents}`: Number of patents analyzed (integer)
 - `{patent_inventory}`: JSON formatted list of patent summaries with claims
 
 **Usage**: Used by `SimplifiedReportGenerator.generate_report()`

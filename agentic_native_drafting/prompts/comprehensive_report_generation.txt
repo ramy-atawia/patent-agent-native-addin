@@ -26,12 +26,17 @@ Generate a comprehensive report with EXACTLY these 9 sections in this order:
 ## 3. Individual Patent Deep Analysis
 [FOR EACH PATENT: Provide detailed analysis including:]
 - Patent ID and full title
-- Assignee and publication details
+- Assignee and publication details  
 - Relevance score with detailed justification
-- Technical innovation summary from claims
-- Specific claim elements relevant to search
-- Risk factors and blocking potential
-- Design-around feasibility assessment
+- **INTELLIGENT CLAIMS ANALYSIS**: Use the provided LLM-generated claims analysis including:
+  * Claims summary and technical scope from AI analysis
+  * Key innovations identified by AI
+  * Blocking potential assessment with reasoning
+  * Main claim focus and breadth analysis
+  * Technical differentiation factors
+  * Specific claim numbers and key technical elements
+- Risk factors and blocking potential based on AI claims analysis
+- Design-around feasibility assessment with technical alternatives
 
 ## 4. Technology Analysis
 [Deep technical analysis: innovation patterns, technological maturity assessment, standards alignment, implementation complexity patterns, and emerging technology trends across the patent portfolio]
@@ -43,7 +48,14 @@ Generate a comprehensive report with EXACTLY these 9 sections in this order:
 [Competitive landscape analysis: key assignee companies, market positioning assessment, patent strategy analysis, competitive threats evaluation, and industry leadership indicators]
 
 ## 7. Claims Analysis Summary
-[Detailed claims examination: core innovation patterns, claim scope analysis, technical differentiation factors, overlap identification, and potential infringement vectors]
+[**ENHANCED AI-POWERED CLAIMS INTELLIGENCE**: Provide comprehensive claims analysis including:]
+- **Cross-Patent Claims Comparison**: Compare AI-analyzed technical scopes and innovations across patents
+- **Claims Hierarchy Analysis**: Map independent vs dependent claims relationships using AI insights
+- **Technical Coverage Assessment**: Identify areas covered and gaps based on AI-analyzed claim summaries
+- **Blocking Potential Matrix**: Use AI assessments to create infringement risk scenarios
+- **Innovation Patterns**: Analyze key innovations identified by AI across the patent portfolio
+- **Design-Around Opportunities**: Leverage AI-identified differentiation factors for alternatives
+- **Claim Strength Evaluation**: Assess enforceability based on AI analysis of claim breadth and focus
 
 ## 8. Strategic Recommendations
 [Actionable recommendations: IP strategy guidance, freedom to operate recommendations, design-around strategies, licensing considerations, and competitive positioning advice]
