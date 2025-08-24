@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import InsertButton from './InsertButton';
 import { ChatMessage } from '../services/api';
 import MarkdownConverter from './MarkdownConverter';
+import { User } from '@auth0/auth0-spa-js';
 import './MessageBubble.css';
 
 interface MessageBubbleProps {
   message: ChatMessage;
   onInsert: (content: string) => void;
+  user?: User | null;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert, user }) => {
   const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);
   const [isThoughtsExpanded, setIsThoughtsExpanded] = useState(false);
   const [convertedHtml, setConvertedHtml] = useState<string>('');
@@ -43,10 +45,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert 
 
   const { mainContent, reasoning } = isAssistant ? parseAssistantMessage(message.content) : { mainContent: message.content, reasoning: null };
 
+  // Match header avatar logic exactly
+  const displayName = (user && (user.name || user.nickname)) ? (user.name || user.nickname) : null;
+  
   const avatarNode = isAssistant ? (
-    <img src="/assets/novitai-logo.png" alt="Novitai" className="avatar inside" />
+    <img src="/assets/novitai-logo.png" alt="Novitai" className="avatar" />
   ) : (
-    <div className="avatar initials inside">{(message && message.role === 'user') ? 'U' : 'A'}</div>
+    user && user.picture ? (
+      <img src={user.picture} alt="User avatar" className="avatar" />
+    ) : (
+      <div className="initials">
+        {displayName ? displayName.split(' ').map(n => n[0]).slice(0,2).join('').toUpperCase() : 'U'}
+      </div>
+    )
   );
   
   return (
@@ -64,71 +75,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert 
               onClick={() => setIsThoughtsExpanded(!isThoughtsExpanded)}
               aria-expanded={isThoughtsExpanded}
               aria-label={`${isThoughtsExpanded ? 'Hide' : 'Show'} AI thinking process`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-                border: '1px solid #dee2e6',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                padding: '8px 12px',
-                fontSize: '0.85em',
-                color: '#495057',
-                width: '100%',
-                textAlign: 'left',
-                marginBottom: '12px',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}
             >
               <span className="thoughts-icon" style={{
                 transition: 'transform 0.2s ease',
                 transform: isThoughtsExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                fontSize: '0.9em',
-                color: '#6c757d'
+                fontSize: '0.9em'
               }}>
                 ▶
               </span>
-              <span className="thoughts-label" style={{
-                fontWeight: '500',
-                flex: 1
-              }}>
+              <span className="thoughts-label">
                 {isThoughtsExpanded ? 'Hide' : 'Show'} AI Thinking Process
               </span>
-              <span className="thoughts-count" style={{
-                fontSize: '0.8em',
-                color: '#6c757d',
-                background: '#ffffff',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                border: '1px solid #dee2e6'
-              }}>
+              <span className="thoughts-count">
                 {message.thoughts.length} step{message.thoughts.length !== 1 ? 's' : ''}
               </span>
             </button>
             
-            {/* Conditionally render thoughts content */}
-            {isThoughtsExpanded && (
-              <div className="thoughts-content" style={{
-                marginTop: '8px',
-                padding: '12px',
-                backgroundColor: '#f8f9fa',
-                borderRadius: '8px',
-                border: '1px solid #e9ecef',
-                borderLeft: '3px solid #28a745'
-              }}>
-                <div className="thoughts-flowing-paragraph" style={{
-                  fontSize: '0.9em',
-                  lineHeight: '1.6',
-                  color: '#495057',
-                  whiteSpace: 'pre-wrap',
-                  wordWrap: 'break-word'
-                }}>
-                  {message.thoughts.join(' ')}
+            {/* Thoughts content with proper CSS-controlled styling */}
+            <div className={`thoughts-content ${isThoughtsExpanded ? 'expanded' : ''}`}>
+              {isThoughtsExpanded && (
+                <div className="thoughts-content-inner">
+                  {message.thoughts.map((thought, index) => (
+                    <div key={index} className="thought-item">
+                      {thought.trim()}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 

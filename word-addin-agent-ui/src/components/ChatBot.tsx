@@ -17,6 +17,7 @@ export const ChatBot: React.FC = () => {
   const [streamingResponse, setStreamingResponse] = useState('');
   const [streamingThoughts, setStreamingThoughts] = useState<string[]>([]);
   const [streamingAnalysis, setStreamingAnalysis] = useState('');
+  const [isStreamingThoughtsExpanded, setIsStreamingThoughtsExpanded] = useState(false);
   
   // Fixed: Single ref for current streaming state
   const streamingStateRef = useRef({
@@ -399,10 +400,12 @@ export const ChatBot: React.FC = () => {
               aria-hidden="false"
             />
           </div>
-          <div className="header-greeting">
-            <h3>{`Welcome${user && (user.name || user.nickname) ? ', ' + (user.name || user.nickname) : ''}`}</h3>
-          </div>
         </div>
+        
+        <div className="header-center">
+          <h3>{`Welcome${user && (user.name || user.nickname) ? ', ' + (user.name || user.nickname) : ''}`}</h3>
+        </div>
+        
         <div className="header-buttons">
           <div className="profile-menu-container" ref={(el) => profileMenuRef.current = el}>
             <button
@@ -473,35 +476,91 @@ export const ChatBot: React.FC = () => {
             key={index}
             message={message}
             onInsert={handleInsertToDocument}
+            user={user}
           />
         ))}
         
         {/* Fixed: Show streaming content when available */}
-        {(streamingThoughts.length > 0 || streamingAnalysis || streamingResponse) && (
+        {(streamingThoughts.length > 0 || streamingAnalysis || streamingResponse || isLoading) && (
           <div className="message assistant">
             <div className="message-content streaming-message">
               {/* Show streaming thoughts during processing */}
-              {streamingThoughts.length > 0 && (
-                <div className="streaming-thoughts">
-                  <div className="streaming-thoughts-header">
-                    <span className="thoughts-icon">💭</span>
-                    <span>AI is thinking... ({streamingThoughts.length} thoughts)</span>
+              {(streamingThoughts.length > 0 || isLoading) && (
+                <div className={`thoughts-section ${isLoading ? 'streaming' : ''} ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}>
+                  <div 
+                    className={`thoughts-toggle ${isLoading ? 'streaming' : ''} ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}
+                    onClick={() => setIsStreamingThoughtsExpanded(!isStreamingThoughtsExpanded)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span className="thoughts-icon" style={{
+                      transition: 'transform 0.2s ease',
+                      transform: isStreamingThoughtsExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      fontSize: '0.9em'
+                    }}>
+                      ▶
+                    </span>
+                    <span style={{ flex: 1 }}>
+                      {streamingThoughts.length > 0 
+                        ? `${isStreamingThoughtsExpanded ? 'Hide' : 'Show'} AI Thinking (${streamingThoughts.length} thoughts)` 
+                        : `${isStreamingThoughtsExpanded ? 'Hide' : 'Show'} AI Thinking Process`
+                      }
+                    </span>
+                    {isLoading && (
+                      <span style={{
+                        fontSize: '0.8em',
+                        color: '#1b5e20',
+                        background: 'linear-gradient(135deg, #f1f8e9, #e8f5e8)',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        border: '1px solid #a5d6a7'
+                      }}>
+                        Processing...
+                      </span>
+                    )}
                   </div>
-                  <div className="streaming-thoughts-content">
-                    {/* Show accumulated streaming analysis if available */}
-                    {streamingAnalysis && (
-                      <div className="streaming-analysis-item">
-                        <strong>🔍 Invention Analysis:</strong>
-                        <div className="analysis-text">
-                          {streamingAnalysis}
-                          <span className="typing-indicator">▋</span>
+                  <div className={`thoughts-content ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}>
+                    {/* Show thinking indicator when loading and no thoughts yet */}
+                    {isLoading && streamingThoughts.length === 0 && (
+                      <div className="thoughts-thinking-indicator">
+                        <span>Processing your request</span>
+                        <div className="thoughts-thinking-dots">
+                          <span></span>
+                          <span></span>
+                          <span></span>
                         </div>
                       </div>
                     )}
                     
-                    {/* Show other thoughts as flowing text */}
-                    <div className="streaming-thoughts-flowing">
-                      {streamingThoughts.join(' ')}
+                    {/* Show accumulated streaming analysis if available */}
+                    {streamingAnalysis && (
+                      <div className="thought-item">
+                        <strong>🔍 Invention Analysis:</strong>
+                        <div className="analysis-text">
+                          {streamingAnalysis}
+                          {isLoading && <span className="typing-indicator">▋</span>}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Show other thoughts as individual items */}
+                    <div className="thoughts-flowing">
+                      {streamingThoughts.map((thought, index) => (
+                        <div key={index} className="thought-item new-thought">
+                          {thought.trim()}
+                        </div>
+                      ))}
+                      
+                      {/* Show thinking indicator when actively loading more thoughts */}
+                      {isLoading && streamingThoughts.length > 0 && (
+                        <div className="thoughts-thinking-indicator">
+                          <span>Thinking more</span>
+                          <div className="thoughts-thinking-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
