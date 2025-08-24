@@ -4,11 +4,11 @@ Test script to verify prompt extraction is working correctly
 """
 
 import sys
+import os
 from pathlib import Path
 
 # Add the src directory to Python path
-src_dir = Path(__file__).parent / "src"
-sys.path.insert(0, str(src_dir))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from prompt_loader import prompt_loader
 

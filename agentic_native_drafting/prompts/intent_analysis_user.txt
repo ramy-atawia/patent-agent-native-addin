@@ -1,0 +1,9 @@
+Analyze this user request and explain what they want:
+
+User Input: "{user_input}"
+
+Context: {conversation_context}
+
+Available intents: claim_drafting, claim_review, patent_guidance, invention_analysis, prior_art_search, technical_query, general_conversation
+
+Provide brief analysis of what the user is requesting and why. Keep it conversational and focused on the user's needs.

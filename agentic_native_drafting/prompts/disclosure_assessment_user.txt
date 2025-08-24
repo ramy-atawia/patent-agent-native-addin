@@ -1,0 +1,5 @@
+Assess this user request for patent claim drafting:
+
+"{disclosure}"
+
+Does this contain sufficient technical content to draft meaningful patent claims? Look for any technical terms, concepts, or invention descriptions. Even brief technical mentions can be sufficient if they indicate a specific technical domain or application.

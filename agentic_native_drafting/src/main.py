@@ -12,7 +12,7 @@ from typing import List, Optional
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agent import agent_with_thoughts
+from .agent import agent
 from .models import AgentResponse
 
 class StreamEventType(str, Enum):
@@ -206,7 +206,7 @@ class EnhancedPatentService:
                 # Use the streaming agent with simplified event handling
                 final_response = ""
                 events_received = 0
-                async for event in agent_with_thoughts.run_streaming(disclosure, session_history):
+                async for event in agent.run_streaming(disclosure, session_history):
                     event_type = event.get('type', 'unknown')
                     events_received += 1
                     print(f"🔍 Backend received event #{events_received}: {event_type} - {str(event)[:200]}...")  # Debug logging
@@ -235,6 +235,35 @@ class EnhancedPatentService:
                         final_data = {
                             "response": final_response,
                             "metadata": event.get('metadata', {}),
+                            "data": event.get('data', {}),
+                            "performance": {
+                                "events_streamed": self._runs[run_id]["metrics"]["events_streamed"],
+                                "thoughts_generated": self._runs[run_id]["metrics"]["thoughts_generated"]
+                            }
+                        }
+                        
+                        self._runs[run_id]["status"] = "completed"
+                        self._update_run_metrics(run_id, "end_time")
+                        
+                        # Add to session history
+                        self._add_to_session_history(run_data["session_id"], disclosure, final_response)
+                        print(f"💾 Updated session history for session {run_data['session_id']}")
+                        
+                        yield create_sse_event(StreamEventType.RESULTS, final_data)
+                        return  # Important: stop processing after completion
+                        
+                    elif event_type == 'results':
+                        # Direct results (like insufficient details responses)
+                        final_response = event.get('response', 'Process completed')
+                        print(f"🎯 Emitting RESULTS event with direct response: {final_response[:100]}...")  # Debug logging
+                        
+                        final_data = {
+                            "response": final_response,
+                            "metadata": event.get('metadata', {
+                                "should_draft_claims": False,
+                                "has_claims": False,
+                                "reasoning": "Direct response provided"
+                            }),
                             "data": event.get('data', {}),
                             "performance": {
                                 "events_streamed": self._runs[run_id]["metrics"]["events_streamed"],

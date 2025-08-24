@@ -1,0 +1,12 @@
+Analyze this invention for patent claim drafting:
+
+Invention: {disclosure}
+{context_prompt}
+
+Provide analysis covering:
+1. Key technical elements and how they relate
+2. What makes this invention novel/patentable
+3. Best claim structure approach (method/system/apparatus)
+4. Strategy for dependent claims
+
+Focus on the technical merits and patentability analysis. Do not write actual claim text.

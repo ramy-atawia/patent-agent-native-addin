@@ -1,0 +1,4 @@
+Based on this analysis:
+{analysis_content}
+
+Classify the user intent for: '{user_input}'

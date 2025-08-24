@@ -1,8 +1,74 @@
-# Patent Search Prompts
+# Agent Prompts
 
-This folder contains the LLM prompts used by the patent search system, extracted from the main code for better maintainability.
+This directory contains prompt templates used by the intelligent patent agent system. All prompts are externalized for easy editing and version control.
 
-## Available Prompts
+## Prompt Categories
+
+### 1. Intent Analysis & Classification
+- **intent_analysis_system.txt** - System prompt for analyzing user intent
+- **intent_analysis_user.txt** - User prompt template for intent analysis
+- **intent_classification_system.txt** - System prompt for intent classification
+- **intent_classification_user.txt** - User prompt template for intent classification
+
+### 2. Disclosure Assessment
+- **disclosure_assessment_system.txt** - System prompt for evaluating technical content sufficiency
+- **disclosure_assessment_user.txt** - User prompt template for disclosure assessment
+
+### 3. Claims Analysis & Generation
+- **claims_analysis_system.txt** - System prompt for technical analysis
+- **claims_analysis_user.txt** - User prompt template for claims analysis
+- **claims_generation_system.txt** - System prompt for claims generation
+- **claims_generation_user.txt** - User prompt template for claims generation
+
+### 4. Legacy Prior Art Search Prompts
+- **claims_analysis.txt** - Original claims analysis prompt (prior art system)
+- **comprehensive_report_generation.txt** - Report generation prompt (prior art system)
+- **patent_relevance_analysis.txt** - Relevance analysis prompt (prior art system)
+- **search_strategy_generation.txt** - Search strategy prompt (prior art system)
+
+## Usage
+
+Prompts are loaded using the `PromptLoader` class from `src/prompt_loader.py`:
+
+```python
+from src.prompt_loader import prompt_loader
+
+# Load a simple prompt
+system_prompt = prompt_loader.load_prompt("intent_analysis_system")
+
+# Load a prompt with variables
+user_prompt = prompt_loader.load_prompt("intent_analysis_user", 
+    user_input="draft claims for AI",
+    conversation_context="No previous conversation"
+)
+```
+
+## Variable Substitution
+
+Prompts support Python string formatting with named variables. Use `{variable_name}` syntax in prompt files.
+
+### Common Variables:
+- `{user_input}` - User's input text
+- `{conversation_context}` - Previous conversation context
+- `{disclosure}` - Technical disclosure content
+- `{analysis_content}` - Analysis results from previous steps
+- `{context_prompt}` - Additional context information
+
+## LLM Call Flow
+
+The agent system uses 5 distinct LLM calls for sufficient requests:
+
+1. **Assessment** (disclosure_assessment_*) - Evaluate technical sufficiency
+2. **Intent Analysis** (intent_analysis_*) - Analyze user intent
+3. **Intent Classification** (intent_classification_*) - Classify intent via function call
+4. **Claims Analysis** (claims_analysis_*) - Technical analysis and strategy
+5. **Claims Generation** (claims_generation_*) - Generate patent claims via function call
+
+For insufficient requests, only the Assessment call is made before early return.
+
+---
+
+## Legacy Prior Art Search Prompts
 
 ### 1. `search_strategy_generation.txt`
 **Purpose**: Generates focused patent search strategies using PatentsView API syntax.
@@ -11,8 +77,6 @@ This folder contains the LLM prompts used by the patent search system, extracted
 - `{user_query}`: The user's search query (string)
 
 **Usage**: Used by `SimplifiedQueryGenerator.generate_search_strategies()`
-
----
 
 ### 2. `patent_relevance_analysis.txt` 
 **Purpose**: Analyzes patent relevance to search query and returns a JSON score.
@@ -24,8 +88,6 @@ This folder contains the LLM prompts used by the patent search system, extracted
 
 **Usage**: Used by `SimplifiedPatentAnalyzer.check_relevance()`
 
----
-
 ### 3. `comprehensive_report_generation.txt`
 **Purpose**: Generates comprehensive patent analysis reports with mandatory 9-section structure.
 
@@ -35,8 +97,6 @@ This folder contains the LLM prompts used by the patent search system, extracted
 - `{patent_inventory}`: JSON-formatted patent data with claims analysis
 
 **Usage**: Used by `SimplifiedReportGenerator.generate_report()`
-
----
 
 ### 4. `claims_analysis.txt`
 **Purpose**: Provides intelligent LLM-based analysis of patent claims for IP strategy decisions.

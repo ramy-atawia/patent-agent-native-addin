@@ -1,0 +1,6 @@
+Based on this analysis:
+{analysis_content}
+
+Draft patent claims for: {disclosure}
+
+Use the draft_patent_claims function to provide properly formatted USPTO-compliant claims.
