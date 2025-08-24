@@ -1,0 +1,72 @@
+Generate focused patent search strategies for: "{user_query}"
+
+You are an expert patent analyst creating precise search strategies. Use PatentsView API syntax.
+
+OPERATOR REFERENCE:
+- "_neq": not equal to
+- "_gt": greater than
+- "_gte": greater than or equal to
+- "_lt": less than
+- "_lte": less than or equal to
+- "_begins": string begins with value
+- "_contains": string contains value
+- "_text_all": text contains ALL words in value string
+- "_text_any": text contains ANY words in value string
+- "_text_phrase": text contains exact phrase
+- "_not": negation operator
+- "_and": conjunction (array of criteria)
+- "_or": disjunction (array of criteria)
+
+FIELD TARGETING:
+- patent_title: Patent title (text field)
+- patent_abstract: Patent abstract (text field)
+- patent_claims: Patent claims text (use with claims endpoint)
+- inventors.inventor_name_last: Inventor last name
+- assignees.assignee_organization: Assignee organization
+- patent_date: Patent grant date (YYYY-MM-DD format)
+- patent_year: Patent grant year
+
+TEXT SEARCH BEST PRACTICES:
+- Use "_text_any" ONLY for UNIQUE technical terms (e.g., "OFDMA", "beamforming", "MIMO")
+- CRITICAL: "_text_any" with common terms like "5G NR LTE" will match ANY of those words separately, 
+  potentially returning MILLIONS of patents containing just "5G" OR just "NR" OR just "LTE"
+- Use "_text_phrase" for ALL broad/common terms to ensure precise phrase matching (e.g., "dynamic spectrum sharing")
+- Use "_text_all" when ALL terms must be present together in the text
+- ALWAYS combine broad terms like "5G" with "_text_phrase" and specific concepts
+- Prefer nested queries with "_and" to combine precise phrases with unique technical terms
+- For "5G dynamic spectrum sharing", use: "_text_phrase" for "dynamic spectrum sharing" AND "_text_phrase" for "5G"
+- Use company names and very specific technical acronyms with "_text_any" for targeted searches
+
+QUERY PRECISION HIERARCHY (most to least precise):
+1. "_text_phrase" - exact phrase matching (use for common terms)
+2. "_text_all" - all words must appear (use for moderate precision)  
+3. "_text_any" - any word matches (use ONLY for unique technical terms)
+
+QUERY STRUCTURE EXAMPLES:
+- Simple: {{"patent_title": "wireless communication"}}
+- UNIQUE terms with _text_any: {{"_text_any": {{"patent_title": "OFDMA beamforming MIMO"}}}}
+- CORRECT for broad terms: {{"_and": [{{"_text_phrase": {{"patent_title": "dynamic spectrum sharing"}}}}, {{"_text_phrase": {{"patent_abstract": "5G"}}}}]}}
+- WRONG (too broad): {{"_text_any": {{"patent_abstract": "5G NR LTE dynamic spectrum sharing"}}}}
+- Multiple precise phrases: {{"_and": [{{"_text_phrase": {{"patent_title": "dynamic spectrum sharing"}}}}, {{"_text_any": {{"patent_abstract": "beamforming MIMO interference"}}}}]}}
+
+Return ONLY a JSON array with this structure:
+[
+    {{
+        "name": "STRATEGY_NAME",
+        "description": "detailed strategy explanation",
+        "query": {{<PatentsView query structure>}},
+        "expected_results": 15,
+        "priority": 1,
+        "technical_focus": "primary technical domain",
+        "coverage_scope": "NARROW|MEDIUM|BROAD"
+    }}
+]
+
+Generate exactly 4-5 diverse strategies covering different technical angles using proper PatentsView API syntax.
+
+CRITICAL PRECISION REQUIREMENTS:
+- NEVER use "_text_any" with broad terms like "5G", "LTE", "NR", "wireless", "cellular", "spectrum"
+- ALWAYS use "_text_phrase" for common/broad technical terms
+- ONLY use "_text_any" for very specific technical terms like "OFDMA", "beamforming", "MIMO"
+- Combine precise phrases using "_and" for better specificity
+- Target 10-50 results per strategy, not thousands

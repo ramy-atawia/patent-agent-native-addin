@@ -1,0 +1,84 @@
+Generate a comprehensive patent analysis report with mandatory structured format.
+
+SEARCH QUERY: "{query}"
+TOTAL PATENTS ANALYZED: {total_patents}
+
+PATENT INVENTORY - USE EXACT IDs AND TITLES:
+{patent_inventory}
+
+🚨🚨🚨 MANDATORY REPORT STRUCTURE - DO NOT DEVIATE 🚨🚨🚨
+
+Generate a comprehensive report with EXACTLY these 9 sections in this order:
+
+## 1. Executive Summary
+[Comprehensive overview: key findings, total patents analyzed, primary risk level, main technological themes, overall competitive landscape assessment, and critical insights summary]
+
+## 2. Search Methodology & Criteria
+### 2.1 Search Strategy Overview
+[Detailed explanation of search approach, query formulation rationale, and coverage strategy]
+
+### 2.2 Query Construction & Technical Focus
+[Technical rationale for search terms, field targeting strategy, and precision vs recall balance]
+
+### 2.3 Relevance Threshold & Filtering Criteria  
+[Explanation of relevance scoring methodology, filtering criteria applied, and quality assurance measures]
+
+## 3. Individual Patent Deep Analysis
+[FOR EACH PATENT: Provide detailed analysis including:]
+- Patent ID and full title
+- Assignee and publication details
+- Relevance score with detailed justification
+- Technical innovation summary from claims
+- Specific claim elements relevant to search
+- Risk factors and blocking potential
+- Design-around feasibility assessment
+
+## 4. Technology Analysis
+[Deep technical analysis: innovation patterns, technological maturity assessment, standards alignment, implementation complexity patterns, and emerging technology trends across the patent portfolio]
+
+## 5. Patent Risk Assessment Summary
+[Comprehensive risk evaluation: overall blocking potential across portfolio, design-around difficulty analysis, commercial impact assessment, enforcement likelihood, and strategic risk recommendations]
+
+## 6. Competitive Intelligence
+[Competitive landscape analysis: key assignee companies, market positioning assessment, patent strategy analysis, competitive threats evaluation, and industry leadership indicators]
+
+## 7. Claims Analysis Summary
+[Detailed claims examination: core innovation patterns, claim scope analysis, technical differentiation factors, overlap identification, and potential infringement vectors]
+
+## 8. Strategic Recommendations
+[Actionable recommendations: IP strategy guidance, freedom to operate recommendations, design-around strategies, licensing considerations, and competitive positioning advice]
+
+## 9. Conclusion and Next Steps
+[Summary of critical findings, recommended follow-up actions, priority areas for additional research, and strategic implementation timeline]
+
+🚨🚨🚨 MANDATORY FORMATTING REQUIREMENTS 🚨🚨🚨
+- Use EXACT section headers as shown above (including numbering 1-9)
+- Include ALL 9 sections - do not skip any
+- Use exact patent IDs and titles from Patent Inventory only
+- Follow the detailed subsection structure for Section 2 (2.1, 2.2, 2.3)
+- Make each section substantial with detailed analysis (minimum 2-3 paragraphs per section)
+- Do NOT combine sections or use different numbering
+- Do NOT use simplified headings
+- Each section must provide actionable insights and detailed technical analysis
+
+🎯 SECTION COMPLETION CHECKLIST - VERIFY ALL ARE INCLUDED:
+□ 1. Executive Summary
+□ 2. Search Methodology & Criteria (with 2.1, 2.2, 2.3 subsections)  
+□ 3. Individual Patent Deep Analysis
+□ 4. Technology Analysis
+□ 5. Patent Risk Assessment Summary
+□ 6. Competitive Intelligence
+□ 7. Claims Analysis Summary
+□ 8. Strategic Recommendations
+□ 9. Conclusion and Next Steps
+
+ANALYSIS DEPTH REQUIREMENTS:
+- Provide specific technical details from patent claims
+- Include quantitative assessments where possible
+- Reference specific claim numbers and technical elements
+- Offer practical, actionable insights for each section
+- Maintain professional patent analysis standards throughout
+
+START YOUR RESPONSE WITH: "# Prior Art Search Report"
+
+Focus on practical insights, specific claim analysis, and actionable intelligence for IP strategy decisions.

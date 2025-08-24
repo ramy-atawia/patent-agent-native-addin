@@ -1,0 +1,38 @@
+Analyze patent relevance to search query with comprehensive evaluation. Return ONLY a JSON response.
+
+SEARCH QUERY: {search_query}
+PATENT TITLE: {title}
+PATENT ABSTRACT: {abstract}
+
+Conduct thorough relevance analysis considering:
+
+TECHNICAL RELEVANCE FACTORS:
+1. Direct Technology Match: Does the patent directly address the search technology?
+2. Core Innovation Alignment: How well do the patent's innovations align with the search focus?
+3. Technical Approach Similarity: Are the underlying technical approaches comparable?
+4. Implementation Scope: Does the patent cover the same technical scope as the search?
+5. Standards Compatibility: Does the patent relate to relevant technical standards?
+
+SEMANTIC ANALYSIS:
+- Analyze technical terminology overlap
+- Consider conceptual relationships between patent and search
+- Evaluate innovation novelty in the context of the search
+- Assess practical applicability to the search domain
+
+RELEVANCE SCORING CRITERIA:
+- 0.0-0.2: IRRELEVANT - No meaningful connection to search query
+- 0.3-0.4: SLIGHT - Tangential relation, some shared terminology but different focus
+- 0.5-0.6: MODERATE - Related technology area with some overlapping concepts  
+- 0.7-0.8: HIGH - Strong technical alignment with clear relevance to search
+- 0.9-1.0: EXCELLENT - Direct match with high innovation overlap
+
+Return ONLY this JSON structure:
+{{
+    "relevance_score": <float 0.0-1.0>,
+    "reasoning": "<detailed explanation of relevance assessment considering technical alignment, innovation overlap, and practical applicability>",
+    "key_alignment_factors": ["<factor1>", "<factor2>", "<factor3>"],
+    "technical_overlap_level": "<NONE|LOW|MEDIUM|HIGH>",
+    "innovation_relevance": "<NOT_RELEVANT|TANGENTIAL|RELATED|HIGHLY_RELEVANT>"
+}}
+
+Provide comprehensive analysis focusing on technical depth and practical relevance to the search query.

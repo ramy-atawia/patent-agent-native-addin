@@ -21,6 +21,12 @@ from datetime import datetime
 from dotenv import load_dotenv
 from langfuse import observe
 
+# Try relative import first, fallback to absolute
+try:
+    from .prompt_loader import prompt_loader
+except ImportError:
+    from prompt_loader import prompt_loader
+
 # Load environment variables
 load_dotenv()
 
@@ -297,78 +303,8 @@ class SimplifiedQueryGenerator:
     async def generate_search_strategies(self, user_query: str) -> List[SearchStrategy]:
         """Generate focused search strategies without over-analysis"""
         try:
-            prompt = f"""Generate focused patent search strategies for: "{user_query}"
-
-You are an expert patent analyst creating precise search strategies. Use PatentsView API syntax.
-
-OPERATOR REFERENCE:
-- "_neq": not equal to
-- "_gt": greater than
-- "_gte": greater than or equal to
-- "_lt": less than
-- "_lte": less than or equal to
-- "_begins": string begins with value
-- "_contains": string contains value
-- "_text_all": text contains ALL words in value string
-- "_text_any": text contains ANY words in value string
-- "_text_phrase": text contains exact phrase
-- "_not": negation operator
-- "_and": conjunction (array of criteria)
-- "_or": disjunction (array of criteria)
-
-FIELD TARGETING:
-- patent_title: Patent title (text field)
-- patent_abstract: Patent abstract (text field)
-- patent_claims: Patent claims text (use with claims endpoint)
-- inventors.inventor_name_last: Inventor last name
-- assignees.assignee_organization: Assignee organization
-- patent_date: Patent grant date (YYYY-MM-DD format)
-- patent_year: Patent grant year
-
-TEXT SEARCH BEST PRACTICES:
-- Use "_text_any" ONLY for UNIQUE technical terms (e.g., "OFDMA", "beamforming", "MIMO")
-- CRITICAL: "_text_any" with common terms like "5G NR LTE" will match ANY of those words separately, 
-  potentially returning MILLIONS of patents containing just "5G" OR just "NR" OR just "LTE"
-- Use "_text_phrase" for ALL broad/common terms to ensure precise phrase matching (e.g., "dynamic spectrum sharing")
-- Use "_text_all" when ALL terms must be present together in the text
-- ALWAYS combine broad terms like "5G" with "_text_phrase" and specific concepts
-- Prefer nested queries with "_and" to combine precise phrases with unique technical terms
-- For "5G dynamic spectrum sharing", use: "_text_phrase" for "dynamic spectrum sharing" AND "_text_phrase" for "5G"
-- Use company names and very specific technical acronyms with "_text_any" for targeted searches
-
-QUERY PRECISION HIERARCHY (most to least precise):
-1. "_text_phrase" - exact phrase matching (use for common terms)
-2. "_text_all" - all words must appear (use for moderate precision)  
-3. "_text_any" - any word matches (use ONLY for unique technical terms)
-
-QUERY STRUCTURE EXAMPLES:
-- Simple: {{"patent_title": "wireless communication"}}
-- UNIQUE terms with _text_any: {{"_text_any": {{"patent_title": "OFDMA beamforming MIMO"}}}}
-- CORRECT for broad terms: {{"_and": [{{"_text_phrase": {{"patent_title": "dynamic spectrum sharing"}}}}, {{"_text_phrase": {{"patent_abstract": "5G"}}}}]}}
-- WRONG (too broad): {{"_text_any": {{"patent_abstract": "5G NR LTE dynamic spectrum sharing"}}}}
-- Multiple precise phrases: {{"_and": [{{"_text_phrase": {{"patent_title": "dynamic spectrum sharing"}}}}, {{"_text_any": {{"patent_abstract": "beamforming MIMO interference"}}}}]}}
-
-Return ONLY a JSON array with this structure:
-[
-    {{
-        "name": "STRATEGY_NAME",
-        "description": "detailed strategy explanation",
-        "query": {{<PatentsView query structure>}},
-        "expected_results": 15,
-        "priority": 1,
-        "technical_focus": "primary technical domain",
-        "coverage_scope": "NARROW|MEDIUM|BROAD"
-    }}
-]
-
-Generate exactly 4-5 diverse strategies covering different technical angles using proper PatentsView API syntax.
-
-CRITICAL PRECISION REQUIREMENTS:
-- NEVER use "_text_any" with broad terms like "5G", "LTE", "NR", "wireless", "cellular", "spectrum"
-- ALWAYS use "_text_phrase" for common/broad technical terms
-- ONLY use "_text_any" for very specific technical terms like "OFDMA", "beamforming", "MIMO"
-- Combine precise phrases using "_and" for better specificity
-- Target 10-50 results per strategy, not thousands"""
+            # Load prompt from external file
+            prompt = prompt_loader.load_prompt("search_strategy_generation", user_query=user_query)
 
             response = await self._call_llm(prompt)
             
@@ -442,44 +378,13 @@ class SimplifiedPatentAnalyzer:
             title = patent_data.get("patent_title", "")[:200]
             abstract = patent_data.get("patent_abstract", "")[:400] 
             
-            prompt = f"""Analyze patent relevance to search query with comprehensive evaluation. Return ONLY a JSON response.
-
-SEARCH QUERY: {search_query}
-PATENT TITLE: {title}
-PATENT ABSTRACT: {abstract}
-
-Conduct thorough relevance analysis considering:
-
-TECHNICAL RELEVANCE FACTORS:
-1. Direct Technology Match: Does the patent directly address the search technology?
-2. Core Innovation Alignment: How well do the patent's innovations align with the search focus?
-3. Technical Approach Similarity: Are the underlying technical approaches comparable?
-4. Implementation Scope: Does the patent cover the same technical scope as the search?
-5. Standards Compatibility: Does the patent relate to relevant technical standards?
-
-SEMANTIC ANALYSIS:
-- Analyze technical terminology overlap
-- Consider conceptual relationships between patent and search
-- Evaluate innovation novelty in the context of the search
-- Assess practical applicability to the search domain
-
-RELEVANCE SCORING CRITERIA:
-- 0.0-0.2: IRRELEVANT - No meaningful connection to search query
-- 0.3-0.4: SLIGHT - Tangential relation, some shared terminology but different focus
-- 0.5-0.6: MODERATE - Related technology area with some overlapping concepts  
-- 0.7-0.8: HIGH - Strong technical alignment with clear relevance to search
-- 0.9-1.0: EXCELLENT - Direct match with high innovation overlap
-
-Return ONLY this JSON structure:
-{{
-    "relevance_score": <float 0.0-1.0>,
-    "reasoning": "<detailed explanation of relevance assessment considering technical alignment, innovation overlap, and practical applicability>",
-    "key_alignment_factors": ["<factor1>", "<factor2>", "<factor3>"],
-    "technical_overlap_level": "<NONE|LOW|MEDIUM|HIGH>",
-    "innovation_relevance": "<NOT_RELEVANT|TANGENTIAL|RELATED|HIGHLY_RELEVANT>"
-}}
-
-Provide comprehensive analysis focusing on technical depth and practical relevance to the search query."""
+            # Load prompt from external file
+            prompt = prompt_loader.load_prompt(
+                "patent_relevance_analysis",
+                search_query=search_query,
+                title=title,
+                abstract=abstract
+            )
             
             response = await self._call_llm(prompt)
             
@@ -659,90 +564,13 @@ SEARCH METADATA:
                 })
             
             # ONE comprehensive LLM call for the entire report
-            prompt = f"""Generate a comprehensive patent analysis report with mandatory structured format.
-
-SEARCH QUERY: "{search_result.query}"
-TOTAL PATENTS ANALYZED: {len(top_patents)}
-
-PATENT INVENTORY - USE EXACT IDs AND TITLES:
-{json.dumps(claims_summaries, indent=2)}
-
-🚨🚨🚨 MANDATORY REPORT STRUCTURE - DO NOT DEVIATE 🚨🚨🚨
-
-Generate a comprehensive report with EXACTLY these 9 sections in this order:
-
-## 1. Executive Summary
-[Comprehensive overview: key findings, total patents analyzed, primary risk level, main technological themes, overall competitive landscape assessment, and critical insights summary]
-
-## 2. Search Methodology & Criteria
-### 2.1 Search Strategy Overview
-[Detailed explanation of search approach, query formulation rationale, and coverage strategy]
-
-### 2.2 Query Construction & Technical Focus
-[Technical rationale for search terms, field targeting strategy, and precision vs recall balance]
-
-### 2.3 Relevance Threshold & Filtering Criteria  
-[Explanation of relevance scoring methodology, filtering criteria applied, and quality assurance measures]
-
-## 3. Individual Patent Deep Analysis
-[FOR EACH PATENT: Provide detailed analysis including:]
-- Patent ID and full title
-- Assignee and publication details
-- Relevance score with detailed justification
-- Technical innovation summary from claims
-- Specific claim elements relevant to search
-- Risk factors and blocking potential
-- Design-around feasibility assessment
-
-## 4. Technology Analysis
-[Deep technical analysis: innovation patterns, technological maturity assessment, standards alignment, implementation complexity patterns, and emerging technology trends across the patent portfolio]
-
-## 5. Patent Risk Assessment Summary
-[Comprehensive risk evaluation: overall blocking potential across portfolio, design-around difficulty analysis, commercial impact assessment, enforcement likelihood, and strategic risk recommendations]
-
-## 6. Competitive Intelligence
-[Competitive landscape analysis: key assignee companies, market positioning assessment, patent strategy analysis, competitive threats evaluation, and industry leadership indicators]
-
-## 7. Claims Analysis Summary
-[Detailed claims examination: core innovation patterns, claim scope analysis, technical differentiation factors, overlap identification, and potential infringement vectors]
-
-## 8. Strategic Recommendations
-[Actionable recommendations: IP strategy guidance, freedom to operate recommendations, design-around strategies, licensing considerations, and competitive positioning advice]
-
-## 9. Conclusion and Next Steps
-[Summary of critical findings, recommended follow-up actions, priority areas for additional research, and strategic implementation timeline]
-
-🚨🚨🚨 MANDATORY FORMATTING REQUIREMENTS 🚨🚨🚨
-- Use EXACT section headers as shown above (including numbering 1-9)
-- Include ALL 9 sections - do not skip any
-- Use exact patent IDs and titles from Patent Inventory only
-- Follow the detailed subsection structure for Section 2 (2.1, 2.2, 2.3)
-- Make each section substantial with detailed analysis (minimum 2-3 paragraphs per section)
-- Do NOT combine sections or use different numbering
-- Do NOT use simplified headings
-- Each section must provide actionable insights and detailed technical analysis
-
-🎯 SECTION COMPLETION CHECKLIST - VERIFY ALL ARE INCLUDED:
-□ 1. Executive Summary
-□ 2. Search Methodology & Criteria (with 2.1, 2.2, 2.3 subsections)  
-□ 3. Individual Patent Deep Analysis
-□ 4. Technology Analysis
-□ 5. Patent Risk Assessment Summary
-□ 6. Competitive Intelligence
-□ 7. Claims Analysis Summary
-□ 8. Strategic Recommendations
-□ 9. Conclusion and Next Steps
-
-ANALYSIS DEPTH REQUIREMENTS:
-- Provide specific technical details from patent claims
-- Include quantitative assessments where possible
-- Reference specific claim numbers and technical elements
-- Offer practical, actionable insights for each section
-- Maintain professional patent analysis standards throughout
-
-START YOUR RESPONSE WITH: "# Prior Art Search Report"
-
-Focus on practical insights, specific claim analysis, and actionable intelligence for IP strategy decisions."""
+            # Load prompt from external file
+            prompt = prompt_loader.load_prompt(
+                "comprehensive_report_generation",
+                query=search_result.query,
+                total_patents=len(top_patents),
+                patent_inventory=json.dumps(claims_summaries, indent=2)
+            )
 
             report = await self._call_llm(prompt)
             
