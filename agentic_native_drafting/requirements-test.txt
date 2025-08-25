@@ -1,0 +1,33 @@
+# Testing dependencies for the modular system test suite
+
+# Core testing framework
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Mocking and test utilities
+pytest-mock>=3.10.0
+pytest-cov>=4.0.0
+
+# Optional: Enhanced testing capabilities
+pytest-xdist>=3.0.0          # Parallel test execution
+pytest-html>=3.1.0           # HTML test reports
+pytest-json-report>=1.5.0    # JSON test reports
+
+# Code quality and linting (optional)
+flake8>=6.0.0                # Code style checking
+black>=23.0.0                # Code formatting
+isort>=5.12.0                # Import sorting
+
+# Type checking (optional)
+mypy>=1.0.0                  # Static type checking
+types-requests>=2.28.0       # Type stubs for requests
+
+# Performance testing (optional)
+pytest-benchmark>=4.0.0      # Performance benchmarking
+
+# Test data generation (optional)
+faker>=18.0.0                # Fake data generation
+factory-boy>=3.2.0           # Test data factories
+
+# Coverage reporting (optional)
+coverage>=7.0.0              # Code coverage measurement

@@ -1,0 +1,5 @@
+User Input: {user_input}
+
+Context: {context}
+
+Please provide helpful guidance and advice based on the user's input and context. Focus on being informative, practical, and supportive.

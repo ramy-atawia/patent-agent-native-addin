@@ -1,162 +1,155 @@
-# Agent Prompts
+# Prompts Directory
 
-This directory contains prompt templates used by the intelligent patent agent system. All prompts are externalized for easy editing and version control.
+This directory contains all LLM prompts used by the new modular backend system. All prompts are externalized from the code for better maintainability, version control, and prompt engineering.
 
-## Prompt Categories
+## 📁 **Prompt Files Overview**
 
-### 1. Intent Analysis & Classification
-- **intent_analysis_system.txt** - System prompt for analyzing user intent
-- **intent_analysis_user.txt** - User prompt template for intent analysis
-- **intent_classification_system.txt** - System prompt for intent classification
-- **intent_classification_user.txt** - User prompt template for intent classification
+### **Core Intent Classification**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `intent_analysis_system.txt` | System prompt for intent analysis | `IntentClassificationTool` |
+| `intent_analysis_user.txt` | User prompt for intent analysis | `IntentClassificationTool` |
+| `intent_classification_system.txt` | System prompt for intent classification | `IntentClassificationTool` |
+| `intent_classification_user.txt` | User prompt for intent classification | `IntentClassificationTool` |
+| `intent_classification_orchestrator_system.txt` | System prompt for orchestrator intent classification | `AgentOrchestrator` |
+| `intent_classification_orchestrator_user.txt` | User prompt for orchestrator intent classification | `AgentOrchestrator` |
 
-### 2. Disclosure Assessment
-- **disclosure_assessment_system.txt** - System prompt for evaluating technical content sufficiency
-- **disclosure_assessment_user.txt** - User prompt template for disclosure assessment
+### **Claims Processing**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `claims_analysis_system.txt` | System prompt for claims analysis | `ClaimDraftingTool` |
+| `claims_analysis_user.txt` | User prompt for claims analysis | `ClaimDraftingTool` |
+| `claims_generation_system.txt` | System prompt for claims generation | `ClaimDraftingTool` |
+| `claims_generation_user.txt` | User prompt for claims generation | `ClaimDraftingTool` |
+| `claim_drafting_user.txt` | Legacy user prompt for claim drafting | Legacy system |
 
-### 3. Claims Analysis & Generation
-- **claims_analysis_system.txt** - System prompt for technical analysis
-- **claims_analysis_user.txt** - User prompt template for claims analysis
-- **claims_generation_system.txt** - System prompt for claims generation
-- **claims_generation_user.txt** - User prompt template for claims generation
+### **Disclosure Assessment**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `disclosure_assessment_system.txt` | System prompt for disclosure assessment | `DisclosureAssessmentTool` |
+| `disclosure_assessment_user.txt` | User prompt for disclosure assessment | `DisclosureAssessmentTool` |
 
-### 4. Legacy Prior Art Search Prompts
-- **claims_analysis.txt** - Original claims analysis prompt (prior art system)
-- **comprehensive_report_generation.txt** - Report generation prompt (prior art system)
-- **patent_relevance_analysis.txt** - Relevance analysis prompt (prior art system)
-- **search_strategy_generation.txt** - Search strategy prompt (prior art system)
+### **General Conversation**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `general_conversation_system.txt` | System prompt for general conversation | `GeneralConversationTool` |
+| `general_conversation_user.txt` | User prompt for general conversation | `GeneralConversationTool` |
 
-## Usage
+### **Patent Guidance**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `patent_guidance_system.txt` | System prompt for patent guidance | `PatentGuidanceTool` |
+| `patent_guidance_user.txt` | User prompt for patent guidance | `PatentGuidanceTool` |
 
-Prompts are loaded using the `PromptLoader` class from `src/prompt_loader.py`:
+### **Prior Art Search**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `prior_art_search_system.txt` | System prompt for prior art search | `PriorArtSearchTool` |
+| `search_strategy_generation.txt` | Legacy search strategy generation | Legacy system |
+| `patent_relevance_analysis.txt` | Legacy patent relevance analysis | Legacy system |
+| `comprehensive_report_generation.txt` | Legacy comprehensive report generation | Legacy system |
 
+### **Template Claims**
+| File | Purpose | Used By |
+|------|---------|----------|
+| `template_claim_classification_system.txt` | System prompt for template claim classification | `TemplateClaimTool` |
+| `template_claim_classification_user.txt` | User prompt for template claim classification | `TemplateClaimTool` |
+
+## 🔄 **LLM Call Flow with Prompt Files**
+
+### **1. Intent Classification (Orchestrator)**
 ```python
-from src.prompt_loader import prompt_loader
-
-# Load a simple prompt
-system_prompt = prompt_loader.load_prompt("intent_analysis_system")
-
-# Load a prompt with variables
-user_prompt = prompt_loader.load_prompt("intent_analysis_user", 
-    user_input="draft claims for AI",
-    conversation_context="No previous conversation"
-)
+# System prompt from: intent_classification_orchestrator_system.txt
+# User prompt from: intent_classification_orchestrator_user.txt
+messages = [
+    {
+        "role": "system",
+        "content": prompt_loader.load_prompt("intent_classification_orchestrator_system")
+    },
+    {
+        "role": "user",
+        "content": prompt_loader.load_prompt("intent_classification_orchestrator_user", user_input=user_input)
+    }
+]
 ```
 
-## Variable Substitution
+### **2. Intent Classification (Tool)**
+```python
+# System prompt from: intent_analysis_system.txt
+# User prompt from: intent_analysis_user.txt
+# Then: intent_classification_system.txt + intent_classification_user.txt
+```
+
+### **3. Claims Drafting**
+```python
+# System prompt from: claims_generation_system.txt
+# User prompt from: claims_generation_user.txt
+```
+
+### **4. General Conversation**
+```python
+# System prompt from: general_conversation_system.txt
+# User prompt from: general_conversation_user.txt
+```
+
+### **5. Patent Guidance**
+```python
+# System prompt from: patent_guidance_system.txt
+# User prompt from: patent_guidance_user.txt
+```
+
+### **6. Prior Art Search**
+```python
+# System prompt from: prior_art_search_system.txt
+```
+
+### **7. Template Claim Classification**
+```python
+# System prompt from: template_claim_classification_system.txt
+# User prompt from: template_claim_classification_user.txt
+```
+
+## ✅ **Verification Status**
+
+| Component | Status | Prompt Files Used |
+|-----------|--------|-------------------|
+| `AgentOrchestrator` | ✅ **COMPLETE** | `intent_classification_orchestrator_*.txt` |
+| `IntentClassificationTool` | ✅ **COMPLETE** | `intent_analysis_*.txt`, `intent_classification_*.txt` |
+| `ClaimDraftingTool` | ✅ **COMPLETE** | `claims_generation_*.txt` |
+| `GeneralConversationTool` | ✅ **COMPLETE** | `general_conversation_*.txt` |
+| `PatentGuidanceTool` | ✅ **COMPLETE** | `patent_guidance_*.txt` |
+| `PriorArtSearchTool` | ✅ **COMPLETE** | `prior_art_search_system.txt` |
+| `TemplateClaimTool` | ✅ **COMPLETE** | `template_claim_classification_*.txt` |
+| `DisclosureAssessmentTool` | ✅ **COMPLETE** | `disclosure_assessment_*.txt` |
+
+## 🎯 **Benefits of Externalized Prompts**
+
+1. **Maintainability**: Prompts can be edited without touching Python code
+2. **Version Control**: Prompt changes are tracked separately from code logic
+3. **Testing**: Different prompt versions can be tested easily
+4. **Collaboration**: Non-developers can contribute to prompt engineering
+5. **Reusability**: Prompts can be shared across different functions
+6. **Documentation**: Each prompt is self-documenting with clear variable names
+
+## 📝 **Variable Substitution**
 
 Prompts support Python string formatting with named variables. Use `{variable_name}` syntax in prompt files.
 
-### Common Variables:
+### **Common Variables:**
 - `{user_input}` - User's input text
 - `{conversation_context}` - Previous conversation context
 - `{disclosure}` - Technical disclosure content
 - `{analysis_content}` - Analysis results from previous steps
-- `{context_prompt}` - Additional context information
+- `{context}` - Additional context information
 
-## LLM Call Flow
+## 🚫 **No Hardcoded Prompts**
 
-The agent system uses 5 distinct LLM calls for sufficient requests:
+**ALL LLM calls in the new backend now use prompt files.** This ensures:
+- ✅ **Zero hardcoded prompts** in Python code
+- ✅ **100% prompt file usage** for all LLM interactions
+- ✅ **Consistent prompt management** across the entire system
+- ✅ **Easy prompt versioning** and A/B testing
 
-1. **Assessment** (disclosure_assessment_*) - Evaluate technical sufficiency
-2. **Intent Analysis** (intent_analysis_*) - Analyze user intent
-3. **Intent Classification** (intent_classification_*) - Classify intent via function call
-4. **Claims Analysis** (claims_analysis_*) - Technical analysis and strategy
-5. **Claims Generation** (claims_generation_*) - Generate patent claims via function call
+## 🔍 **Legacy System Notes**
 
-For insufficient requests, only the Assessment call is made before early return.
-
----
-
-## Legacy Prior Art Search Prompts
-
-### 1. `search_strategy_generation.txt`
-**Purpose**: Generates focused patent search strategies using PatentsView API syntax.
-
-**Variables**:
-- `{user_query}`: The user's search query (string)
-
-**Usage**: Used by `SimplifiedQueryGenerator.generate_search_strategies()`
-
-### 2. `patent_relevance_analysis.txt` 
-**Purpose**: Analyzes patent relevance to search query and returns a JSON score.
-
-**Variables**:
-- `{search_query}`: The original search query (string)
-- `{title}`: Patent title (truncated to 200 chars)
-- `{abstract}`: Patent abstract (truncated to 400 chars)
-
-**Usage**: Used by `SimplifiedPatentAnalyzer.check_relevance()`
-
-### 3. `comprehensive_report_generation.txt`
-**Purpose**: Generates comprehensive patent analysis reports with mandatory 9-section structure.
-
-**Variables**:
-- `{query}`: The search query (string)
-- `{total_patents}`: Number of patents analyzed (integer)
-- `{patent_inventory}`: JSON-formatted patent data with claims analysis
-
-**Usage**: Used by `SimplifiedReportGenerator.generate_report()`
-
-### 4. `claims_analysis.txt`
-**Purpose**: Provides intelligent LLM-based analysis of patent claims for IP strategy decisions.
-
-**Variables**:
-- `{patent_title}`: The patent title (string)
-- `{search_query}`: The search context/query (string)
-- `{total_claims}`: Total number of claims (integer)
-- `{independent_claims}`: Number of independent claims (integer)
-- `{dependent_claims}`: Number of dependent claims (integer)
-- `{claims_data}`: JSON-formatted claims data with text and metadata
-
-**Usage**: Used by `SimplifiedReportGenerator._analyze_claims_with_llm()`
-
-**Output**: JSON structure with claims summary, technical scope, key innovations, blocking potential, claim breadth, and differentiation factors.
-
-**Variables**:
-- `{query}`: The search query (string)
-- `{total_patents}`: Number of patents analyzed (integer)
-- `{patent_inventory}`: JSON formatted list of patent summaries with claims
-
-**Usage**: Used by `SimplifiedReportGenerator.generate_report()`
-
-## How It Works
-
-The prompts are loaded using the `PromptLoader` class in `src/prompt_loader.py`:
-
-```python
-from .prompt_loader import prompt_loader
-
-# Load and format a prompt
-formatted_prompt = prompt_loader.load_prompt(
-    "search_strategy_generation", 
-    user_query="dynamic spectrum sharing"
-)
-```
-
-## Editing Prompts
-
-To modify prompts:
-
-1. Edit the `.txt` files directly
-2. Use `{variable_name}` syntax for placeholders
-3. No code changes required - prompts are loaded dynamically
-4. Cache is automatically managed
-
-## Benefits
-
-- ✅ **Easy to edit**: No code changes needed to modify prompts
-- ✅ **Version control**: Track prompt changes separately from code  
-- ✅ **Maintainable**: Clear separation of concerns
-- ✅ **Reusable**: Prompts can be used in other parts of the system
-- ✅ **Readable**: Much easier to read and edit large prompts
-
-## File Structure
-
-```
-prompts/
-├── README.md                           # This documentation
-├── search_strategy_generation.txt      # Search strategy generation prompt
-├── patent_relevance_analysis.txt       # Patent relevance scoring prompt  
-└── comprehensive_report_generation.txt # Report generation prompt
-```
+Some prompt files (marked as "Legacy system") are kept for compatibility with the old monolithic backend. These are not used by the new modular system but are preserved for reference and potential future integration.

@@ -1,0 +1,7 @@
+Draft a patent claim for the following invention disclosure:
+
+Disclosure: {disclosure}
+Document Content: {document_content}
+Conversation History: {conversation_history}
+
+Return the claim draft only.

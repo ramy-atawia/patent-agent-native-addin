@@ -1,0 +1,5 @@
+User Input: {user_input}
+
+Context: {context}
+
+Please provide a helpful response to this request.
