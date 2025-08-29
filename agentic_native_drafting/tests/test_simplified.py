@@ -4,14 +4,16 @@ Test the simplified patent search system
 """
 
 import asyncio
+import pytest
 import sys
 import os
 
 # Add the src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from prior_art_search import SimplifiedPatentSearchEngine
+from src.prior_art_search import SimplifiedPatentSearchEngine
 
+@pytest.mark.asyncio
 async def test_simplified_search():
     """Test the simplified patent search system"""
     try:

@@ -4,6 +4,7 @@ Test the updated prior_art_search.py module with extracted prompts
 """
 
 import asyncio
+import pytest
 import sys
 import os
 from pathlib import Path
@@ -12,8 +13,9 @@ from pathlib import Path
 src_dir = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_dir))
 
-from prior_art_search import SimplifiedPatentSearchEngine
+from src.prior_art_search import SimplifiedPatentSearchEngine
 
+@pytest.mark.asyncio
 async def test_updated_prior_art_search():
     """Test the updated patent search system with external prompts"""
     

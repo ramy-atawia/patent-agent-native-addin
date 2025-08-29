@@ -4,6 +4,7 @@ Test LLM-based claims analysis functionality
 """
 
 import asyncio
+import pytest
 import sys
 import os
 from pathlib import Path
@@ -11,9 +12,10 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from prior_art_search import PatentSearchConfig, SimplifiedReportGenerator
-from models import PatentClaim
+from src.prior_art_search import PatentSearchConfig, SimplifiedReportGenerator
+from src.models import PatentClaim
 
+@pytest.mark.asyncio
 async def test_llm_claims_analysis():
     """Test the new LLM-based claims analysis function"""
     print("🧪 Testing LLM-based Claims Analysis")

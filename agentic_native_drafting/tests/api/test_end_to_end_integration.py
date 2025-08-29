@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch, AsyncMock
 
 # Import the new modular system components
 from src.agent_core.orchestrator import AgentOrchestrator
-from src.tools.claim_drafting_tool import ClaimDraftingTool
+from src.tools.claim_drafting_tool import ContentDraftingTool
 from src.tools.prior_art_search_tool import PriorArtSearchTool
 from src.tools.general_conversation_tool import GeneralConversationTool
 
@@ -141,11 +141,11 @@ class TestEndToEndIntegration:
         """Test that tools actually execute and produce results"""
         print("\n🔧 Testing Tool Execution with Real Tools...")
     
-        # Test ClaimDraftingTool directly
-        claim_tool = ClaimDraftingTool()
+        # Test ContentDraftingTool directly
+        claim_tool = ContentDraftingTool()
         test_input = "A method for wireless communication using 5G technology with dynamic spectrum sharing"
     
-        print(f"   📝 Testing ClaimDraftingTool with: {test_input[:50]}...")
+        print(f"   📝 Testing ContentDraftingTool with: {test_input[:50]}...")
     
         try:
             events = []

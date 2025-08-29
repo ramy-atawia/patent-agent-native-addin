@@ -37,7 +37,7 @@ class LLMClient:
         self, 
         messages: List[Dict], 
         functions: Optional[List[Dict]] = None, 
-        max_tokens: int = 4000
+        max_tokens: int = 8000  # Increased for longer patent claims
     ) -> AsyncGenerator[Dict, None]:
         """Send streaming request to Azure OpenAI"""
         
@@ -50,7 +50,7 @@ class LLMClient:
         
         payload = {
             "messages": messages,
-            "max_completion_tokens": max_tokens,
+            "max_tokens": max_tokens,  # Use max_tokens instead of max_completion_tokens
             "temperature": 0.0,
             "stream": True
         }
@@ -60,7 +60,7 @@ class LLMClient:
             payload["tool_choice"] = "auto"
         
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=120) as client:  # Increased timeout for longer responses
                 async with client.stream("POST", url, headers=headers, json=payload) as response:
                     response.raise_for_status()
                     
@@ -128,7 +128,7 @@ llm_client = LLMClient()
 async def send_llm_request_streaming(
     messages: List[Dict], 
     functions: Optional[List[Dict]] = None, 
-    max_tokens: int = 4000
+    max_tokens: int = 8000  # Increased for longer patent claims
 ) -> AsyncGenerator[Dict, None]:
     """Global function for LLM requests (maintains compatibility)"""
     async for chunk in llm_client.send_request_streaming(messages, functions, max_tokens):

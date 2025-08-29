@@ -180,7 +180,7 @@
   font-size: 0.9rem;
 }
 
-/* Unified thoughts system - single container for all states - ALWAYS COLLAPSED BY DEFAULT */
+/* FIXED: Unified thoughts system - visible by default, collapsed only when user chooses */
 .thoughts-section {
   margin-top: 16px;
   margin-bottom: 12px;
@@ -195,11 +195,7 @@
   box-shadow: none;
   font-size: 0.85em;
   position: relative;
-  /* Start collapsed by default for ALL states */
-  height: 0;
-  min-height: 0;
-  max-height: 0;
-  overflow: hidden;
+  /* REMOVED: No auto-collapse - visible by default */
 }
 
 /* NO DIFFERENCE between streaming and completed - both collapsed by default */
@@ -227,9 +223,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: var(--message-content-width);
-  min-width: 280px;
-  max-width: var(--message-content-width);
+  width: 100%;
   box-shadow: var(--shadow-thoughts);
   visibility: visible;
   text-align: left;
@@ -241,34 +235,36 @@
   /* Same background and styling as normal state */
 }
 
-/* Unified thoughts content - works for all states - COLLAPSED BY DEFAULT */
+/* FIXED: Thoughts content - visible by default, collapsed only when toggled */
 .thoughts-content {
-  margin: 0;
-  padding: 0;
-  height: 0;
-  max-height: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: var(--transition-smooth);
-  transform: translateY(-8px);
-  width: var(--message-content-width);
-  min-width: 280px;
-  max-width: var(--message-content-width);
-}
-
-/* ONLY expand when explicitly toggled */
-.thoughts-content.expanded {
-  height: auto;
-  max-height: 200px;
-  overflow-y: auto;
-  opacity: 1;
   margin-top: 8px;
-  transform: translateY(0);
   padding: 12px;
   background: var(--thoughts-expanded-gradient);
   border-radius: var(--border-radius-small);
   border: 1px solid var(--thoughts-border);
   box-shadow: var(--shadow-thoughts);
+  width: 100%;
+  transition: var(--transition-smooth);
+  /* REMOVED: No auto-collapse - visible by default */
+  opacity: 1;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Only hide when explicitly not expanded */
+.thoughts-content:not(.expanded) {
+  height: 0;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-top: 0;
+  padding: 0;
+  transform: translateY(-8px);
+}
+
+/* Ensure inner content is always ready */
+.thoughts-content-inner {
+  width: 100%;
 }
 
 /* Remove auto-expansion during streaming - keep collapsed unless user expands */
@@ -809,9 +805,8 @@
   .thoughts-section,
   .thoughts-toggle,
   .thoughts-content {
-    width: var(--mobile-content-width);
+    width: 100%;
     min-width: 220px;
-    max-width: var(--mobile-content-width);
   }
   
   /* .thoughts-section inherits default collapsed state - no mobile overrides needed */

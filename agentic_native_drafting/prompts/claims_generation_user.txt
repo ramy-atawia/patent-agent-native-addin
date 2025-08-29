@@ -1,6 +1,14 @@
 Based on this analysis:
 {analysis_content}
 
+CONVERSATION HISTORY:
+{conversation_history}
+
+DOCUMENT CONTENT:
+{document_content}
+
 Draft patent claims for: {disclosure}
 
 Use the draft_patent_claims function to provide properly formatted USPTO-compliant claims.
+
+Ensure the claims are consistent with the existing document content and build upon the conversation history.

@@ -1,19 +1,19 @@
 """
-Unit tests for ClaimDraftingTool.
+Unit tests for ContentDraftingTool.
 """
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from src.tools.claim_drafting_tool import ClaimDraftingTool
+from src.tools.claim_drafting_tool import ContentDraftingTool
 
 
-class TestClaimDraftingTool:
-    """Test suite for ClaimDraftingTool."""
+class TestContentDraftingTool:
+    """Test suite for ContentDraftingTool."""
     
     @pytest.fixture
     def tool(self):
-        """Create a ClaimDraftingTool instance for testing."""
-        return ClaimDraftingTool()
+        """Create a ContentDraftingTool instance for testing."""
+        return ContentDraftingTool()
     
     @pytest.fixture
     def sample_disclosure(self):
@@ -25,7 +25,7 @@ class TestClaimDraftingTool:
         """Test tool initialization and default values."""
         assert tool.max_claims == 20
         assert tool.max_claim_length == 500
-        assert isinstance(tool, ClaimDraftingTool)
+        assert isinstance(tool, ContentDraftingTool)
     
     @pytest.mark.unit
     def test_validate_inputs_valid(self, tool, sample_disclosure):

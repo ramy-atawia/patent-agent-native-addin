@@ -6,20 +6,37 @@ import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# The .env file is in the agentic_native_drafting directory
+import pathlib
+env_path = pathlib.Path(__file__).parent.parent.parent / '.env'
+load_dotenv(env_path)
 
 # Import only the tools that are actually used in routing
-from src.tools.claim_drafting_tool import ClaimDraftingTool
-from src.tools.claim_review_tool import ClaimReviewTool
-from src.tools.patent_guidance_tool import PatentGuidanceTool
-from src.tools.prior_art_search_tool import PriorArtSearchTool
-from src.tools.general_conversation_tool import GeneralConversationTool
+try:
+    from src.tools.claim_drafting_tool import ContentDraftingTool
+    from src.tools.claim_review_tool import ContentReviewTool
+    from src.tools.patent_guidance_tool import GeneralGuidanceTool
+    from src.tools.prior_art_search_tool import PriorArtSearchTool
+    from src.tools.general_conversation_tool import GeneralConversationTool
 
-# Import self-contained components
-from src.utils.enums import IntentType
+    # Import self-contained components
+    from src.utils.enums import IntentType
 
-# Import response standardizer
-from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event
+    # Import response standardizer
+    from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event
+except ImportError:
+    # Fallback for when running from src directory
+    from ..tools.claim_drafting_tool import ContentDraftingTool
+    from ..tools.claim_review_tool import ContentReviewTool
+    from ..tools.patent_guidance_tool import GeneralGuidanceTool
+    from ..tools.prior_art_search_tool import PriorArtSearchTool
+    from ..tools.general_conversation_tool import GeneralConversationTool
+
+    # Import self-contained components
+    from ..utils.enums import IntentType
+
+    # Import response standardizer
+    from ..utils.response_standardizer import create_thought_event, create_results_event, create_error_event
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +57,9 @@ class AgentOrchestrator:
     def __init__(self):
         # Generic tool mapping - only tools that are actually used in routing
         self.tools = {
-            "ClaimDraftingTool": ClaimDraftingTool(),
-            "ClaimReviewTool": ClaimReviewTool(),
-            "PatentGuidanceTool": PatentGuidanceTool(),
+            "ContentDraftingTool": ContentDraftingTool(),
+            "ContentReviewTool": ContentReviewTool(),
+            "GeneralGuidanceTool": GeneralGuidanceTool(),
             "PriorArtSearchTool": PriorArtSearchTool(),
             "GeneralConversationTool": GeneralConversationTool()
         }
@@ -65,7 +82,8 @@ class AgentOrchestrator:
         user_input: str, 
         context: str = "", 
         session_id: str = None,
-        parameters: Optional[Dict[str, Any]] = None
+        parameters: Optional[Dict[str, Any]] = None,
+        document_content: Optional[Dict[str, Any]] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Main entry point for handling user requests.
@@ -75,17 +93,31 @@ class AgentOrchestrator:
             context: Additional context or requirements
             session_id: Unique session identifier for conversation memory
             parameters: Generic parameters that can be used by any domain
+            document_content: Document content for context-aware processing
         
         Yields:
             Streaming events in standardized format
         """
         try:
+            print(f"🔍 ORCHESTRATOR DEBUG: handle() called with:")
+            print(f"   user_input: {user_input}")
+            print(f"   context: {context}")
+            print(f"   session_id: {session_id}")
+            print(f"   parameters: {parameters}")
+            print(f"   document_content: {document_content}")
+            print(f"🔍 ORCHESTRATOR DEBUG: Current memory keys: {list(self.conversation_memory.keys())}")
+            
             # Initialize session if not provided
             if not session_id:
                 session_id = f"session_{datetime.now().timestamp()}"
+                print(f"🔍 ORCHESTRATOR DEBUG: Generated new session_id: {session_id}")
             
             # Update conversation memory
+            print(f"🔍 ORCHESTRATOR DEBUG: About to call _update_conversation_memory")
             self._update_conversation_memory(session_id, user_input, context)
+            
+            # Enhance context with document content if available
+            enhanced_context = self._build_enhanced_context(context, document_content, session_id)
             
             logger.info(f"Processing request for session {session_id}: {user_input[:100]}...")
             
@@ -102,7 +134,7 @@ class AgentOrchestrator:
                 thought_type="intent_analysis"
             )
             
-            intent_type, confidence = await self._get_llm_based_intent(user_input, context)
+            intent_type, confidence = await self._get_llm_based_intent(user_input, enhanced_context)
             
             # Step 2: Route to appropriate tool or chain
             if intent_type in ["content_drafting", "content_review", "search", "guidance", "analysis", "query", "general_conversation"]:
@@ -122,9 +154,19 @@ class AgentOrchestrator:
                 )
                 
                 # Get conversation history for context
+                print(f"🔍 ORCHESTRATOR DEBUG: About to get conversation history for session: {session_id}")
                 conversation_history = self.conversation_memory.get(session_id, {}).get("messages", [])
+                print(f"🔍 ORCHESTRATOR DEBUG: Using session_id: '{session_id}'")
+                print(f"🔍 ORCHESTRATOR DEBUG: Memory keys available: {list(self.conversation_memory.keys())}")
+                print(f"🔍 ORCHESTRATOR DEBUG: Found conversation history: {len(conversation_history)} messages")
+                if conversation_history:
+                    print(f"🔍 ORCHESTRATOR DEBUG: First message preview: {conversation_history[0].get('content', 'NO CONTENT')[:100]}...")
+                    print(f"🔍 ORCHESTRATOR DEBUG: First message keys: {list(conversation_history[0].keys())}")
+                else:
+                    print(f"🔍 ORCHESTRATOR DEBUG: No conversation history found for session '{session_id}'")
                 
-                async for event in self._execute_tool(tool_name, user_input, context, parameters, conversation_history):
+                print(f"🔍 ORCHESTRATOR DEBUG: About to call _execute_tool with conversation_history length: {len(conversation_history)}")
+                async for event in self._execute_tool(tool_name, user_input, enhanced_context, parameters, conversation_history, document_content):
                     yield event
                     
             elif intent_type in ["analysis", "query"]:
@@ -150,7 +192,7 @@ class AgentOrchestrator:
                 # Get conversation history for context
                 conversation_history = self.conversation_memory.get(session_id, {}).get("messages", [])
                 
-                async for event in self._execute_tool("GeneralConversationTool", user_input, context, parameters, conversation_history):
+                async for event in self._execute_tool("GeneralConversationTool", user_input, enhanced_context, parameters, conversation_history, document_content):
                     yield event
                     
         except Exception as e:
@@ -163,10 +205,10 @@ class AgentOrchestrator:
     def _get_tool_name_for_intent(self, intent_type: str) -> str:
         """Map intent types to tool names generically"""
         intent_to_tool = {
-            "content_drafting": "ClaimDraftingTool",
-            "content_review": "ClaimReviewTool", 
+            "content_drafting": "ContentDraftingTool",
+            "content_review": "ContentReviewTool", 
             "search": "PriorArtSearchTool",
-            "guidance": "PatentGuidanceTool",
+            "guidance": "GeneralGuidanceTool",
             "analysis": "GeneralConversationTool",    # Added mapping for analysis
             "query": "GeneralConversationTool",       # Added mapping for query
             "general_conversation": "GeneralConversationTool"
@@ -179,7 +221,8 @@ class AgentOrchestrator:
         user_input: str, 
         context: str,
         parameters: Optional[Dict[str, Any]] = None,
-        conversation_history: Optional[List[Dict[str, Any]]] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        document_content: Optional[Dict[str, Any]] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Execute a specific tool with generic parameters"""
         try:
@@ -191,8 +234,8 @@ class AgentOrchestrator:
                 )
                 return
             
-            # Execute tool with generic parameters and conversation history
-            async for event in tool.run(user_input, context, parameters=parameters or {}, conversation_history=conversation_history or []):
+            # Execute tool with generic parameters, conversation history, and document content
+            async for event in tool.run(user_input, parameters=parameters or {}, conversation_history=conversation_history or [], document_content=document_content):
                 yield event
                 
         except Exception as e:
@@ -205,8 +248,12 @@ class AgentOrchestrator:
     async def _get_llm_based_intent(self, user_input: str, context: str) -> tuple[str, float]:
         """Get intent classification using real LLM analysis"""
         try:
-            from src.utils.llm_client import send_llm_request_streaming
-            from src import prompt_loader
+            try:
+                from src.utils.llm_client import send_llm_request_streaming
+                from src.prompt_loader import prompt_loader
+            except ImportError:
+                from ..utils.llm_client import send_llm_request_streaming
+                from ..prompt_loader import prompt_loader
             import json
             
             # Use generic intent classification prompt
@@ -306,18 +353,27 @@ class AgentOrchestrator:
             return "general_conversation", 0.5
     
     def _update_conversation_memory(self, session_id: str, user_input: str, context: str):
-        """Update conversation memory generically"""
+        """Update conversation memory using API format (role/content)"""
         if session_id not in self.conversation_memory:
             self.conversation_memory[session_id] = {
                 "messages": [],
                 "last_updated": datetime.now().isoformat()
             }
         
-        self.conversation_memory[session_id]["messages"].append({
-            "input": user_input,
-            "context": context,
-            "timestamp": datetime.now().isoformat()
-        })
+        # Only append if this is a new message (don't overwrite existing conversation history)
+        # Check if this exact message already exists to avoid duplicates
+        existing_messages = self.conversation_memory[session_id]["messages"]
+        message_exists = any(
+            msg.get("content") == user_input and msg.get("role") == "user" 
+            for msg in existing_messages
+        )
+        
+        if not message_exists:
+            self.conversation_memory[session_id]["messages"].append({
+                "role": "user",
+                "content": user_input,
+                "timestamp": datetime.now().isoformat()
+            })
         
         # Limit memory size
         if len(self.conversation_memory[session_id]["messages"]) > self.max_memory_size:
@@ -353,3 +409,103 @@ class AgentOrchestrator:
     def get_available_tools(self) -> List[str]:
         """Get list of available tool names"""
         return list(self.tools.keys())
+    
+    def _build_enhanced_context(self, context: str, document_content: Optional[Dict[str, Any]], session_id: str) -> str:
+        """Build enhanced context by combining user context, document content, and conversation history"""
+        print(f"🔍 ORCHESTRATOR DEBUG: _build_enhanced_context called with:")
+        print(f"   context: {context}")
+        print(f"   session_id: {session_id}")
+        print(f"   document_content: {document_content}")
+        
+        context_parts = [context] if context else []
+        
+        # Add document content context
+        if document_content:
+            doc_context = self._build_document_context(document_content)
+            if doc_context:
+                context_parts.append(f"DOCUMENT CONTEXT:\n{doc_context}")
+                print(f"🔍 ORCHESTRATOR DEBUG: Added document context: {len(doc_context)} chars")
+        
+        # Add conversation history context
+        print(f"🔍 ORCHESTRATOR DEBUG: About to get conversation history for context building")
+        conversation_history = self.conversation_memory.get(session_id, {}).get("messages", [])
+        print(f"🔍 ORCHESTRATOR DEBUG: Found conversation history: {len(conversation_history)} messages")
+        
+        if conversation_history:
+            history_context = self._build_conversation_context(conversation_history)
+            if history_context:
+                context_parts.append(f"CONVERSATION HISTORY:\n{history_context}")
+                print(f"🔍 ORCHESTRATOR DEBUG: Added conversation history context: {len(history_context)} chars")
+            else:
+                print(f"🔍 ORCHESTRATOR DEBUG: No history context generated")
+        else:
+            print(f"🔍 ORCHESTRATOR DEBUG: No conversation history found for context building")
+        
+        final_context = "\n\n".join(context_parts)
+        print(f"🔍 ORCHESTRATOR DEBUG: Final enhanced context length: {len(final_context)} chars")
+        return final_context
+    
+    def _build_document_context(self, document_content: Dict[str, Any]) -> str:
+        """Build context from document content"""
+        context_parts = []
+        
+        if document_content.get("text"):
+            # Extract key information from document
+            doc_text = document_content["text"]
+            # Limit to first 500 characters to avoid overwhelming context
+            context_parts.append(f"Document content: {doc_text[:500]}{'...' if len(doc_text) > 500 else ''}")
+        
+        if document_content.get("paragraphs"):
+            # Use paragraph structure
+            context_parts.append(f"Document structure: {len(document_content['paragraphs'])} paragraphs")
+        
+        if document_content.get("session_id"):
+            context_parts.append(f"Document session: {document_content['session_id']}")
+        
+        return "\n".join(context_parts)
+    
+    def _build_conversation_context(self, conversation_history: List[Dict[str, Any]]) -> str:
+        """Build context from conversation history using unified API format (role/content)"""
+        print(f"🔍 ORCHESTRATOR DEBUG: _build_conversation_context called with {len(conversation_history)} entries")
+        
+        if not conversation_history:
+            print(f"🔍 ORCHESTRATOR DEBUG: No conversation history provided")
+            return ""
+        
+        # Take last 5 entries to avoid overwhelming context
+        recent_history = conversation_history[-5:]
+        context_parts = []
+        
+        print(f"🔍 ORCHESTRATOR DEBUG: Processing {len(recent_history)} recent entries")
+        
+        for i, entry in enumerate(recent_history):
+            print(f"🔍 ORCHESTRATOR DEBUG: Processing entry {i+1}: {list(entry.keys())}")
+            
+            # Handle unified API format (role/content)
+            if entry.get("role") and entry.get("content"):
+                role = entry["role"]
+                content = entry["content"]
+                print(f"🔍 ORCHESTRATOR DEBUG: Processing API format entry with role: {role}")
+                
+                if role == "user":
+                    context_parts.append(f"USER REQUEST {i+1}: {content[:200]}{'...' if len(content) > 200 else ''}")
+                    print(f"🔍 ORCHESTRATOR DEBUG: Added user request context")
+                elif role == "assistant":
+                    # Look for patent claims in assistant responses
+                    if "Generated Patent Claims:" in content:
+                        claims_start = content.find("Generated Patent Claims:")
+                        claims_section = content[claims_start:]
+                        claims_text = claims_section.replace("Generated Patent Claims:", "PREVIOUSLY GENERATED CLAIMS:")
+                        context_parts.append(f"ASSISTANT RESPONSE {i+1}: {claims_text[:800]}...")
+                        print(f"🔍 ORCHESTRATOR DEBUG: Added assistant response with patent claims")
+                    else:
+                        context_parts.append(f"ASSISTANT RESPONSE {i+1}: {content[:300]}...")
+                        print(f"🔍 ORCHESTRATOR DEBUG: Added assistant response without patent claims")
+                else:
+                    print(f"🔍 ORCHESTRATOR DEBUG: Unknown role: {role}")
+            else:
+                print(f"🔍 ORCHESTRATOR DEBUG: Entry {i+1} missing role or content field: {list(entry.keys())}")
+        
+        final_context = "\n".join(context_parts)
+        print(f"🔍 ORCHESTRATOR DEBUG: Generated conversation context: {len(final_context)} chars")
+        return final_context

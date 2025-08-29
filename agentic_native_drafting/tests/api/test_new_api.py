@@ -78,7 +78,7 @@ class TestNewAPIEndpoints:
     def test_tool_execute(self):
         """Test direct tool execution endpoint"""
         request_data = {
-            "tool_name": "ClaimDraftingTool",
+            "tool_name": "ContentDraftingTool",
             "user_input": "A method for wireless communication",
             "context": "5G technology"
         }

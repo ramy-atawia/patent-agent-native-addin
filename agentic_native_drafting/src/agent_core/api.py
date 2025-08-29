@@ -11,7 +11,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# The .env file is in the agentic_native_drafting directory
+import pathlib
+env_path = pathlib.Path(__file__).parent.parent.parent / '.env'
+load_dotenv(env_path)
 
 from .orchestrator import AgentOrchestrator
 
@@ -390,26 +393,40 @@ async def start_patent_run_frontend(request: FrontendChatRequest):
     backward compatibility with the existing frontend.
     """
     try:
+        print(f"🔍 BACKEND DEBUG: POST /api/patent/run called with:")
+        print(f"   user_message: {request.user_message}")
+        print(f"   conversation_history_length: {len(request.conversation_history)}")
+        print(f"   document_content_keys: {list(request.document_content.keys()) if request.document_content else 'None'}")
+        print(f"   session_id: {request.session_id}")
+        
         # Generate session ID if not provided
         if not request.session_id:
             request.session_id = str(uuid.uuid4())
+            print(f"🔍 BACKEND DEBUG: Generated new session_id: {request.session_id}")
         
         # Create session and run using the session manager
         session_id = session_manager.create_session(request.session_id)
+        print(f"🔍 BACKEND DEBUG: Created session: {session_id}")
+        
         run_id = session_manager.create_run(
             session_id=session_id,
             user_message=request.user_message,  # Store the message!
             conversation_history=request.conversation_history,
             document_content=request.document_content
         )
+        print(f"🔍 BACKEND DEBUG: Created run: {run_id}")
+        print(f"🔍 BACKEND DEBUG: Stored conversation_history: {len(request.conversation_history)} entries")
         
         # Return the same response format the frontend expects
-        return {
+        response = {
             "run_id": run_id,  # ✅ Now returns a unique run_id
             "session_id": session_id
         }
+        print(f"🔍 BACKEND DEBUG: Returning response: {response}")
+        return response
         
     except Exception as e:
+        print(f"🔍 BACKEND DEBUG: POST /api/patent/run error: {e}")
         raise HTTPException(status_code=500, detail=f"Patent run failed: {str(e)}")
 
 @app.post("/api/patent/stream")
@@ -470,10 +487,19 @@ async def stream_patent_response(run_id: str):
     while internally using the new generic agent orchestrator.
     """
     try:
+        print(f"🔍 BACKEND DEBUG: GET /api/patent/stream called with run_id: {run_id}")
+        
         # Get the stored run data
         run_data = session_manager.get_run(run_id)
         if not run_data:
+            print(f"🔍 BACKEND DEBUG: Run not found for run_id: {run_id}")
             raise HTTPException(status_code=404, detail="Run not found")
+        
+        print(f"🔍 BACKEND DEBUG: Retrieved run data:")
+        print(f"   user_message: {run_data['user_message']}")
+        print(f"   session_id: {run_data['session_id']}")
+        print(f"   conversation_history_length: {len(run_data['conversation_history'])}")
+        print(f"   document_content_keys: {list(run_data['document_content'].keys()) if run_data['document_content'] else 'None'}")
         
         # Use the stored user message from the run
         user_input = run_data["user_message"]
@@ -483,12 +509,37 @@ async def stream_patent_response(run_id: str):
         
         # Update run status to processing
         session_manager.update_run_status(run_id, "processing")
+        print(f"🔍 BACKEND DEBUG: Updated run status to processing")
         
         context = "patent_streaming"
         
+        # Update the orchestrator's conversation memory with the stored history BEFORE calling orchestrator
+        print(f"🔍 BACKEND DEBUG: About to set orchestrator memory")
+        print(f"🔍 BACKEND DEBUG: Current orchestrator memory keys: {list(orchestrator.conversation_memory.keys())}")
+        
+        if conversation_history:
+            orchestrator.conversation_memory[session_id] = {
+                "messages": conversation_history,
+                "created_at": datetime.now().isoformat()
+            }
+            print(f"🔍 BACKEND DEBUG: Set memory for session '{session_id}' with {len(conversation_history)} messages")
+            print(f"🔍 BACKEND DEBUG: Memory keys after setting: {list(orchestrator.conversation_memory.keys())}")
+            print(f"🔍 BACKEND DEBUG: First message preview: {conversation_history[0]['content'][:100]}...")
+            print(f"🔍 BACKEND DEBUG: About to call orchestrator.handle with session_id: '{session_id}'")
+        else:
+            print(f"🔍 BACKEND DEBUG: No conversation history provided")
+        
         # Use the existing agent streaming logic with stored context
+        print(f"🔍 BACKEND DEBUG: About to call orchestrator.handle")
+        print(f"🔍 BACKEND DEBUG: Parameters:")
+        print(f"   user_input: {user_input}")
+        print(f"   context: {context}")
+        print(f"   session_id: {session_id}")
+        print(f"   document_content: {document_content}")
+        
         async def generate_response():
             try:
+                print(f"🔍 BACKEND DEBUG: Inside generate_response, calling orchestrator.handle with session_id: '{session_id}'")
                 async for event in orchestrator.handle(
                     user_input, 
                     context, 
@@ -496,10 +547,9 @@ async def stream_patent_response(run_id: str):
                     parameters={
                         "domain": "patent",
                         "workflow_type": "patent_streaming",
-                        "session_id": session_id,
-                        "conversation_history": conversation_history,
-                        "document_content": document_content
-                    }
+                        "session_id": session_id
+                    },
+                    document_content=document_content
                 ):
                     # Send events in the format the frontend expects
                     if event.get("event") == "results":
@@ -621,7 +671,8 @@ async def legacy_chat(request: FrontendChatRequest):
                 agent_request.user_input, 
                 agent_request.context, 
                 agent_request.session_id,
-                parameters=agent_request.parameters
+                parameters=agent_request.parameters,
+                document_content=request.document_content
             ):
                 yield f"data: {json.dumps(event, default=str)}\n\n"
         
@@ -666,11 +717,26 @@ async def legacy_chat_stream(request: FrontendChatRequest):
         
         # Use the existing agent streaming logic
         async def generate_response():
+            # Extract conversation history and document content from parameters
+            conversation_history = request.conversation_history
+            document_content = request.document_content
+            
+            # Update the orchestrator's conversation memory with the provided history
+            if conversation_history:
+                # Clear existing memory for this session and set the provided history
+                orchestrator.conversation_memory[request.session_id] = {
+                    "messages": conversation_history,
+                    "created_at": datetime.now().isoformat()
+                }
+            else:
+                pass
+            
             async for event in orchestrator.handle(
                 agent_request.user_input, 
                 agent_request.context, 
                 agent_request.session_id,
-                parameters=agent_request.parameters
+                parameters=agent_request.parameters,
+                document_content=document_content
             ):
                 yield f"data: {json.dumps(event, default=str)}\n\n"
         

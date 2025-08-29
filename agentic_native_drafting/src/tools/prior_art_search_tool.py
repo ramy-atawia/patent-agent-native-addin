@@ -1,5 +1,9 @@
-from src.interfaces import Tool
-from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event
+try:
+            from src.interfaces import Tool
+            from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event
+except ImportError:
+    from agentic_native_drafting.src.interfaces import Tool
+    from agentic_native_drafting.src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import json
 import logging
@@ -16,9 +20,9 @@ load_dotenv()
 
 # Import prompt loader for sophisticated prompts
 try:
-    from src.prompt_loader import prompt_loader
+            from src.prompt_loader import prompt_loader
 except ImportError:
-    # Fallback if prompt_loader not available
+    # Prompt loader is required - cannot proceed without it
     prompt_loader = None
 
 logger = logging.getLogger(__name__)
@@ -364,43 +368,16 @@ class SimplifiedQueryGenerator:
                     return strategies
                     
                 except Exception as e:
-                    logger.warning(f"Prompt-based strategy generation failed: {e}, falling back to basic strategies")
+                    logger.error(f"Prompt-based strategy generation failed: {e}")
+                    raise ValueError(f"Search strategy generation failed: {str(e)}")
             
-            # Fallback to basic strategies if prompt_loader not available
-            logger.info("Using fallback basic search strategies")
-            strategies = []
-            
-            # Basic title search
-            strategies.append(SearchStrategy(
-                name="Basic Title Search",
-                description=f"Search for patents with terms in title: {user_query}",
-                query={"patent_title": user_query},
-                expected_results=15,
-                priority=1
-            ))
-            
-            # Basic abstract search
-            strategies.append(SearchStrategy(
-                name="Basic Abstract Search",
-                description=f"Search for patents with terms in abstract: {user_query}",
-                query={"patent_abstract": user_query},
-                expected_results=20,
-                priority=2
-            ))
-            
-            return strategies
+            # If we reach here, prompt_loader is not available - this is a critical error
+            logger.error("Prompt loader not available - cannot generate search strategies")
+            raise RuntimeError("Prompt loader not available - search strategy generation cannot proceed")
             
         except Exception as e:
-            logger.error(f"Query generation failed: {e}")
-            # Fallback to simple strategy
-            fallback_strategy = SearchStrategy(
-                name="Fallback Search",
-                description=f"Basic search for: {user_query}",
-                query={"text": user_query},
-                expected_results=10,
-                priority=2
-            )
-            return [fallback_strategy]
+            logger.error(f"Search strategy generation failed: {e}")
+            raise ValueError(f"Search strategy generation failed: {str(e)}")
 
 class SimplifiedPatentAnalyzer:
     """Simplified patent analyzer for relevance scoring"""
@@ -518,15 +495,16 @@ SEARCH METADATA:
                     return report
                     
                 except Exception as e:
-                    logger.warning(f"Prompt-based report generation failed: {e}, falling back to basic report")
+                    logger.error(f"Prompt-based report generation failed: {e}")
+                    raise ValueError(f"Report generation failed: {str(e)}")
             
-            # Fallback to basic report generation
-            logger.info("Using fallback basic report generation")
-            return self._generate_basic_report(query, top_patents)
+            # If we reach here, prompt_loader is not available - this is a critical error
+            logger.error("Prompt loader not available - cannot generate reports")
+            raise RuntimeError("Prompt loader not available - report generation cannot proceed")
             
         except Exception as e:
             logger.error(f"Report generation failed: {e}")
-            return f"Search completed for: {query}. Found {len(results)} results. Report generation failed: {str(e)}"
+            raise ValueError(f"Report generation failed: {str(e)}")
     
     def _generate_enhanced_manual_report(self, query: str, top_patents: List[Dict], patent_inventory: List[Dict]) -> str:
         """Generate enhanced manual report following prompt structure"""
@@ -638,36 +616,7 @@ SEARCH METADATA:
             logger.error(f"Enhanced manual report generation failed: {e}")
             return self._generate_basic_report(query, top_patents)
     
-    def _generate_basic_report(self, query: str, top_patents: List[Dict]) -> str:
-        """Generate basic fallback report"""
-        try:
-            report = f"# Prior Art Search Report\n\n"
-            report += f"**Query:** {query}\n"
-            report += f"**Total Patents Found:** {len(top_patents)}\n"
-            report += f"**Search Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            report += "## Summary\n\n"
-            report += f"Found {len(top_patents)} patents related to '{query}'. "
-            
-            if len(top_patents) > 0:
-                report += "Key findings include:\n\n"
-                
-                # Show sample patents
-                report += "**Sample Patents:**\n\n"
-                for i, patent in enumerate(top_patents[:5], 1):
-                    report += f"### {i}. {patent.get('patent_title', 'No Title')}\n"
-                    report += f"**Patent ID:** {patent.get('patent_id', 'Unknown')}\n"
-                    report += f"**Abstract:** {patent.get('patent_abstract', 'No abstract available')[:200]}...\n\n"
-            
-            return report
-            
-        except Exception as e:
-            logger.error(f"Basic report generation failed: {e}")
-            return f"Search completed for: {query}. Found {len(top_patents)} results. Report generation failed: {str(e)}"
-            
-        except Exception as e:
-            logger.error(f"Report generation failed: {e}")
-            return f"Search completed for: {query}. Found {len(results)} results. Report generation failed: {str(e)}"
+
 
 class PriorArtSearchTool(Tool):
     """
@@ -687,7 +636,7 @@ class PriorArtSearchTool(Tool):
         self.content_analyzer = SimplifiedPatentAnalyzer(self.config)
         self.report_generator = SimplifiedReportGenerator(self.config)
         
-    async def run(self, search_query: str, context: str = "", parameters: Optional[Dict[str, Any]] = None, conversation_history: Optional[List[Dict[str, Any]]] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run(self, search_query: str, context: str = "", parameters: Optional[Dict[str, Any]] = None, conversation_history: Optional[List[Dict[str, Any]]] = None, document_content: Optional[Dict[str, Any]] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute patent search based on query and context.
         
@@ -695,6 +644,8 @@ class PriorArtSearchTool(Tool):
             search_query: The search query text
             context: Additional context or requirements
             parameters: Generic parameters that can be used by any domain
+            conversation_history: Previous conversation context
+            document_content: Document content for context-aware search
         
         Yields:
             Streaming events in standardized format
@@ -705,7 +656,11 @@ class PriorArtSearchTool(Tool):
             max_results = params.get('max_results', self.config.default_max_results)
             relevance_threshold = params.get('relevance_threshold', self.config.default_relevance_threshold)
             
+            # Process context from conversation history and document content
+            enhanced_context = self._build_enhanced_search_context(search_query, context, conversation_history, document_content)
+            
             logger.info(f"Starting patent search for: {search_query[:100]}...")
+            logger.info(f"Enhanced context: {enhanced_context[:200]}...")
             
             # Yield initialization event
             yield create_thought_event(
@@ -861,3 +816,60 @@ class PriorArtSearchTool(Tool):
                 "results": [],
                 "total_found": 0
             }
+    
+    def _build_enhanced_search_context(self, search_query: str, context: str, conversation_history: Optional[List[Dict[str, Any]]], document_content: Optional[Dict[str, Any]]) -> str:
+        """Build enhanced search context from conversation history and document content"""
+        context_parts = [f"Search query: {search_query}"]
+        
+        if context:
+            context_parts.append(f"Additional context: {context}")
+        
+        # Add conversation history context
+        if conversation_history:
+            history_context = self._build_conversation_context(conversation_history)
+            if history_context:
+                context_parts.append(f"CONVERSATION HISTORY:\n{history_context}")
+        
+        # Add document content context
+        if document_content:
+            doc_context = self._build_document_context(document_content)
+            if doc_context:
+                context_parts.append(f"DOCUMENT CONTENT:\n{doc_context}")
+        
+        return "\n\n".join(context_parts)
+    
+    def _build_conversation_context(self, conversation_history: List[Dict[str, Any]]) -> str:
+        """Build context from conversation history"""
+        if not conversation_history:
+            return ""
+        
+        # Take last 3 entries to avoid overwhelming context
+        recent_history = conversation_history[-3:]
+        context_parts = []
+        
+        for i, entry in enumerate(recent_history):
+            if entry.get("input"):
+                context_parts.append(f"Previous request {i+1}: {entry['input'][:150]}{'...' if len(entry['input']) > 150 else ''}")
+            if entry.get("context"):
+                context_parts.append(f"Previous context {i+1}: {entry['context'][:150]}{'...' if len(entry['context']) > 150 else ''}")
+        
+        return "\n".join(context_parts)
+    
+    def _build_document_context(self, document_content: Dict[str, Any]) -> str:
+        """Build context from document content"""
+        context_parts = []
+        
+        if document_content.get("text"):
+            # Extract key information from document
+            doc_text = document_content["text"]
+            # Limit to first 300 characters to avoid overwhelming context
+            context_parts.append(f"Document content: {doc_text[:300]}{'...' if len(doc_text) > 300 else ''}")
+        
+        if document_content.get("paragraphs"):
+            # Use paragraph structure
+            context_parts.append(f"Document structure: {len(document_content['paragraphs'])} paragraphs")
+        
+        if document_content.get("session_id"):
+            context_parts.append(f"Document session: {document_content['session_id']}")
+        
+        return "\n".join(context_parts)

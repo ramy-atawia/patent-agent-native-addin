@@ -13,7 +13,7 @@ interface MessageBubbleProps {
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onInsert, user }) => {
   const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);
-  const [isThoughtsExpanded, setIsThoughtsExpanded] = useState(false);
+  const [isThoughtsExpanded, setIsThoughtsExpanded] = useState(message.thoughtsExpanded ?? false);
   const [convertedHtml, setConvertedHtml] = useState<string>('');
 
   // Debug logging

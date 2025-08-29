@@ -2,4 +2,4 @@ User Input: {user_input}
 
 Context: {context}
 
-Please provide a helpful response to this request.
+Please provide a helpful response to this request. Consider the context carefully and provide a response that builds upon any previous conversation or document content mentioned.

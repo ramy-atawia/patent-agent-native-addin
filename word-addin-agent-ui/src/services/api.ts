@@ -6,7 +6,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp?: string;
-  thoughts?: string[]; // AI thinking process and tool usage
+  thoughts?: string[];
+  thoughtsExpanded?: boolean; // Add this property to fix TypeScript errors
 }
 
 export interface ChatRequest {
@@ -54,11 +55,24 @@ export interface ApiError {
   details?: any;
 }
 
-// Ultra-simplified event types - just what we actually need
 export type EventType = 
-  | 'thoughts'              // All AI thinking/reasoning/progress → Small streaming bubbles
-  | 'results'               // Final results/completion → Large final bubble
-  | 'error';                // Error states → Error handling
+  | 'intent_analysis'
+  | 'intent_classified'
+  | 'claims_drafting_start'
+  | 'claims_progress'
+  | 'claims_progress_streaming'
+  | 'claims_complete'
+  | 'claim_generated'
+  | 'prior_art_start'
+  | 'prior_art_progress'
+  | 'prior_art_complete'
+  | 'review_start'
+  | 'review_progress'
+  | 'review_complete'
+  | 'processing'
+  | 'complete'
+  | 'error'
+  | 'low_confidence';
 
 class ApiService {
   private api: AxiosInstance;
@@ -71,7 +85,6 @@ class ApiService {
       timeout: 30000,
     });
 
-    // Add request interceptor for authentication
     this.api.interceptors.request.use((config) => {
       const token = getAccessToken();
       if (token) {
@@ -101,9 +114,6 @@ class ApiService {
     }
   }
 
-  /**
-   * Start a new patent drafting run
-   */
   async startPatentRun(request: ChatRequest): Promise<RunResponse> {
     try {
       const response = await this.api.post('/api/patent/run', request);
@@ -114,8 +124,7 @@ class ApiService {
   }
 
   /**
-   * Stream the agent's response using Server-Sent Events (SSE)
-   * Updated to properly handle the backend's streaming events
+   * Improved streaming with better error handling and event processing
    */
   async chatStream(
     request: ChatRequest,
@@ -125,18 +134,24 @@ class ApiService {
     signal?: AbortSignal
   ): Promise<void> {
     try {
-      console.log('🚀 API SERVICE: chatStream called with request:', request);
+      console.log('🚀 API SERVICE: chatStream starting with request:', {
+        messageLength: request.user_message.length,
+        historyLength: request.conversation_history.length,
+        hasDocument: !!request.document_content.text,
+        sessionId: request.session_id
+      });
       
-      // First, start the patent run
-      console.log('🚀 API SERVICE: Starting patent run...');
+      // Start the patent run
       const runResponse = await this.startPatentRun(request);
       console.log('🚀 API SERVICE: Patent run started:', runResponse);
       
-      // Then stream the response using the new streaming endpoint
+      // Stream the response
       const response = await fetch(`${this.baseURL}/api/patent/stream?run_id=${runResponse.run_id}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getAccessToken() || ''}`,
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache',
         },
         signal,
       });
@@ -154,152 +169,322 @@ class ApiService {
       const decoder = new TextDecoder();
       let finalResponse: ChatResponse | null = null;
       let currentEventType = '';
+      let eventCount = 0;
 
-      while (true) {
-        if (signal?.aborted) {
-          throw new Error('Stream aborted by client');
-        }
+      try {
+        while (true) {
+          if (signal?.aborted) {
+            throw new Error('Stream aborted by client');
+          }
 
-        const { done, value } = await reader.read();
-        if (done) break;
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log(`📡 Stream completed. Total events processed: ${eventCount}`);
+            break;
+          }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEventType = line.slice(7).trim();
-            console.log('📡 SSE Event:', currentEventType);
-          } else if (line.startsWith('data: ')) {
-            const content = line.slice(6).trim();
-            
-            if (content === '{}') {
-              // Stream complete
-              if (finalResponse) {
-                finalResponse.session_id = runResponse.session_id;
-                onComplete(finalResponse);
-              }
-              return;
-            }
-            
-            try {
-              const parsed = JSON.parse(content);
-              console.log(`🔍 Processing event: ${currentEventType}`, parsed);
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            if (trimmedLine.startsWith('event: ')) {
+              currentEventType = trimmedLine.slice(7).trim();
+              console.log(`📡 SSE Event: ${currentEventType}`);
+            } else if (trimmedLine.startsWith('data: ')) {
+              const content = trimmedLine.slice(6).trim();
+              eventCount++;
               
-              // Simplified event handling - just thoughts and results
-              switch (currentEventType) {
-                case 'results':
-                  // Final completion with results (new simplified backend)
-                  finalResponse = {
-                    response: parsed.response || 'Process completed',
-                    metadata: parsed.metadata || {
-                      should_draft_claims: false,
-                      has_claims: false,
-                      reasoning: parsed.message || 'Process completed'
-                    },
-                    data: parsed.data,
-                    session_id: runResponse.session_id
-                  };
-                  
-                  // Handle different types of completions
-                  if (parsed.claims) {
-                    finalResponse.data = {
-                      ...finalResponse.data,
-                      claims: parsed.claims,
-                      num_claims: parsed.num_claims || parsed.claims.length
-                    };
-                    finalResponse.metadata.should_draft_claims = true;
-                    finalResponse.metadata.has_claims = true;
-                  }
-                  
-                  if (parsed.review_comments) {
-                    finalResponse.data = {
-                      ...finalResponse.data,
-                      review_comments: parsed.review_comments
-                    };
-                  }
-                  
-                  console.log('🎯 Final response prepared:', finalResponse);
-                  onChunk(parsed.response || 'Process completed', 'results');
+              if (content === '{}') {
+                // Stream complete
+                console.log('🎯 Stream completion signal received');
+                if (finalResponse) {
+                  (finalResponse as ChatResponse).session_id = runResponse.session_id;
                   onComplete(finalResponse);
-                  return;
-                
-                case 'complete':
-                  // Legacy support for old backend events
-                  finalResponse = {
-                    response: parsed.response || 'Process completed',
-                    metadata: parsed.metadata || {
-                      should_draft_claims: false,
-                      has_claims: false,
-                      reasoning: parsed.message || 'Process completed'
-                    },
-                    data: parsed.data,
-                    session_id: runResponse.session_id
-                  };
-                  
-                  // Handle different types of completions
-                  if (parsed.claims) {
-                    finalResponse.data = {
-                      ...finalResponse.data,
-                      claims: parsed.claims,
-                      num_claims: parsed.num_claims || parsed.claims.length
-                    };
-                    finalResponse.metadata.should_draft_claims = true;
-                    finalResponse.metadata.has_claims = true;
-                  }
-                  
-                  if (parsed.review_comments) {
-                    finalResponse.data = {
-                      ...finalResponse.data,
-                      review_comments: parsed.review_comments
-                    };
-                  }
-                  
-                  console.log('🎯 Final response prepared:', finalResponse);
-                  onChunk(parsed.response || 'Process completed', 'results');
-                  onComplete(finalResponse);
-                  return;
-                  
-                case 'error':
-                  const errorMsg = parsed.error || parsed.message || 'An error occurred';
-                  onChunk(`❌ ${errorMsg}`, 'error');
-                  onError(new Error(errorMsg));
-                  return;
-                  
-                case 'low_confidence':
-                  const clarificationMsg = parsed.message || 'I need more information to help you effectively.';
-                  onChunk(`❓ ${clarificationMsg}`, 'low_confidence');
-                  break;
-                  
-                default:
-                  // Everything else is a "thought" - reasoning, progress, analysis, etc.
-                  console.log(`� Processing thought event (${currentEventType}):`, parsed);
-                  
-                  // Extract the meaningful text content
-                  const thoughtText = parsed.text || 
-                                    parsed.content || 
-                                    parsed.message || 
-                                    `${currentEventType}: Processing...`;
-                  
-                  onChunk(thoughtText, 'thoughts');
-                  break;
+                }
+                return;
               }
-            } catch (parseError) {
-              console.warn('Failed to parse streaming data:', parseError);
+              
+              try {
+                const parsed = JSON.parse(content);
+                console.log(`🔍 Processing event ${eventCount}: ${currentEventType}`, {
+                  hasText: !!parsed.text,
+                  hasMessage: !!parsed.message,
+                  hasResponse: !!parsed.response,
+                  dataKeys: Object.keys(parsed)
+                });
+                
+                // Process the event
+                await this.processStreamEvent(
+                  currentEventType,
+                  parsed,
+                  onChunk,
+                  (response: ChatResponse) => { 
+                    finalResponse = response; 
+                  },
+                  runResponse.session_id
+                );
+                
+              } catch (parseError) {
+                console.warn('Failed to parse streaming data:', parseError);
+                console.warn('Raw content:', content.substring(0, 200));
+              }
             }
           }
         }
+
+        // Ensure completion if no explicit completion event
+        if (finalResponse) {
+          (finalResponse as ChatResponse).session_id = runResponse.session_id;
+          onComplete(finalResponse);
+        } else {
+          console.warn('Stream ended without final response');
+          onComplete({
+            response: 'Request completed',
+            metadata: {
+              should_draft_claims: false,
+              has_claims: false,
+              reasoning: 'Stream completed without explicit response'
+            },
+            session_id: runResponse.session_id
+          });
+        }
+
+      } finally {
+        reader.releaseLock();
       }
 
-      // If we reach here without a proper completion, ensure we complete
-      if (finalResponse) {
-        finalResponse.session_id = runResponse.session_id;
-        onComplete(finalResponse);
-      }
     } catch (error) {
       console.error('🚨 Stream error:', error);
       onError(error as Error);
+    }
+  }
+
+  /**
+   * Process individual stream events with better error handling
+   */
+  private async processStreamEvent(
+    eventType: string,
+    data: any,
+    onChunk: (chunk: string, eventType?: string) => void,
+    setFinalResponse: (response: ChatResponse) => void,
+    sessionId: string
+  ): Promise<void> {
+    try {
+      switch (eventType) {
+        case 'intent_analysis':
+          onChunk(data.text || data.message || 'Analyzing your request...', 'intent_analysis');
+          break;
+          
+        case 'intent_classified':
+          const confidenceText = data.confidence_score ? 
+            `${Math.round((data.confidence_score || 0) * 100)}% confidence` : '';
+          const intentText = data.intent ? `Intent: ${data.intent}` : '';
+          const combinedText = [intentText, confidenceText].filter(Boolean).join(' - ');
+          onChunk(data.text || combinedText || 'Intent classified', 'intent_classified');
+          break;
+          
+        case 'claims_drafting_start':
+          onChunk(data.text || 'Starting patent claims drafting...', 'claims_drafting_start');
+          break;
+          
+        case 'claims_progress':
+          if (data.stage === 'analysis') {
+            if (data.is_streaming) {
+              // Streaming analysis chunk
+              onChunk(data.text || '', 'claims_progress_streaming');
+            } else {
+              // Stage message
+              onChunk(data.text || 'Analyzing invention disclosure...', 'claims_progress');
+            }
+          } else if (data.stage === 'feature_identification') {
+            onChunk(data.text || 'Identifying key inventive features...', 'claims_progress');
+          } else if (data.stage === 'drafting') {
+            onChunk(data.text || 'Drafting comprehensive patent claims...', 'claims_progress');
+          } else if (data.claim_number) {
+            const claimText = data.text || `Processing claim ${data.claim_number}`;
+            onChunk(claimText, 'claims_progress');
+          } else {
+            onChunk(data.text || 'Processing claims...', 'claims_progress');
+          }
+          break;
+          
+        case 'claim_generated':
+          const claimText = data.text || `Generated claim ${data.claim_number || ''}`;
+          onChunk(claimText, 'claim_generated');
+          break;
+          
+        case 'claims_complete':
+          const claimsMsg = data.num_claims ? 
+            `Successfully drafted ${data.num_claims} patent claims` : 
+            'Patent claims completed';
+          onChunk(data.text || claimsMsg, 'claims_complete');
+          break;
+          
+        case 'prior_art_start':
+          onChunk(data.text || 'Starting prior art search...', 'prior_art_start');
+          break;
+          
+        case 'prior_art_progress':
+          let progressText = 'Processing prior art...';
+          if (data.stage === 'searching') {
+            progressText = 'Searching patent databases...';
+          } else if (data.stage === 'analyzing') {
+            progressText = 'Analyzing search results for relevance...';
+          } else if (data.stage === 'reporting') {
+            progressText = 'Generating comprehensive prior art report...';
+          }
+          onChunk(data.text || progressText, 'prior_art_progress');
+          break;
+          
+        case 'prior_art_complete':
+          const patentsMsg = data.patents_found ? 
+            `Prior art search completed - found ${data.patents_found} relevant patents` : 
+            'Prior art search completed';
+          onChunk(data.text || patentsMsg, 'prior_art_complete');
+          break;
+          
+        case 'review_start':
+          onChunk(data.text || 'Starting patent claim review...', 'review_start');
+          break;
+          
+        case 'review_progress':
+          let reviewText = 'Reviewing claims...';
+          if (data.stage === 'analysis') {
+            reviewText = 'Analyzing claim structure and language...';
+          } else if (data.stage === 'compliance_check') {
+            reviewText = 'Checking USPTO compliance...';
+          }
+          onChunk(data.text || reviewText, 'review_progress');
+          break;
+          
+        case 'review_complete':
+          const reviewMsg = data.review_comments?.length ? 
+            `Claim review completed - found ${data.review_comments.length} issues to address` : 
+            'Claim review completed';
+          onChunk(data.text || reviewMsg, 'review_complete');
+          break;
+          
+        case 'processing':
+          onChunk(data.message || data.text || 'Processing your request...', 'processing');
+          break;
+          
+        case 'complete':
+          // Final completion with results
+          const response: ChatResponse = {
+            response: data.response || 'Process completed',
+            metadata: data.metadata || {
+              should_draft_claims: false,
+              has_claims: false,
+              reasoning: data.message || 'Process completed'
+            },
+            data: data.data,
+            session_id: sessionId
+          };
+          
+          // Handle different types of completions
+          if (data.claims) {
+            response.data = {
+              ...response.data,
+              claims: data.claims,
+              num_claims: data.num_claims || data.claims.length
+            };
+            response.metadata.should_draft_claims = true;
+            response.metadata.has_claims = true;
+          }
+          
+          if (data.review_comments) {
+            response.data = {
+              ...response.data,
+              review_comments: data.review_comments
+            };
+          }
+          
+          console.log('🎯 Final response prepared:', {
+            hasResponse: !!response.response,
+            hasClaims: !!response.data?.claims,
+            hasReviewComments: !!response.data?.review_comments,
+            metadata: response.metadata
+          });
+          
+          setFinalResponse(response);
+          onChunk(data.response || 'Process completed', 'complete');
+          break;
+          
+        case 'error':
+          const errorMsg = data.error || data.message || 'An error occurred';
+          onChunk(`❌ ${errorMsg}`, 'error');
+          throw new Error(errorMsg);
+          
+        case 'low_confidence':
+          const clarificationMsg = data.message || 'I need more information to help you effectively.';
+          onChunk(`❓ ${clarificationMsg}`, 'low_confidence');
+          break;
+          
+        // Legacy event types for backward compatibility
+        case 'status':
+        case 'reasoning':
+          onChunk(data.message || data.text || 'Processing...', eventType);
+          break;
+          
+        case 'search_progress':
+        case 'report_progress':
+          const progressMsg = data.message || data.text || 'Processing...';
+          onChunk(progressMsg, eventType);
+          break;
+          
+        case 'tool_call':
+          const toolMsg = data.tool ? 
+            `🛠️ Using ${data.tool}...` : 
+            '🛠️ Executing tool...';
+          onChunk(data.message || data.text || toolMsg, 'tool_call');
+          break;
+          
+        case 'tool_result':
+          onChunk(data.message || data.text || '✅ Tool execution completed', 'tool_result');
+          break;
+          
+        case 'results':
+          // Legacy results event - treat as completion
+          const legacyResponse: ChatResponse = {
+            response: data.response || 'Process completed',
+            metadata: data.metadata || {
+              should_draft_claims: false,
+              has_claims: false,
+              reasoning: 'Process completed'
+            },
+            data: data.data,
+            session_id: sessionId
+          };
+          setFinalResponse(legacyResponse);
+          onChunk(data.response || 'Results ready', 'results');
+          break;
+          
+        case 'thoughts':
+          // Handle AI thinking process
+          const thoughtContent = data.content || data.text || 'Processing...';
+          onChunk(thoughtContent, 'thoughts');
+          break;
+          
+        case 'done':
+          // Legacy done event - handled by stream completion
+          console.log('🎯 Legacy done event received');
+          break;
+          
+        default:
+          // Handle unknown event type gracefully
+          console.warn('⚠️ Unknown event type:', eventType, data);
+          
+          const unknownMsg = data.text || data.message || data.response || `Unknown event: ${eventType}`;
+          onChunk(unknownMsg, 'unknown');
+          break;
+      }
+    } catch (error) {
+      console.error(`Error processing event ${eventType}:`, error);
+      throw error;
     }
   }
 

@@ -67,4 +67,11 @@ class PromptLoader:
         self._cache.clear()
 
 # Convenience instance for easy import
+
 prompt_loader = PromptLoader()
+
+def load_prompt(prompt_name: str, **variables) -> str:
+    """
+    Top-level convenience function for agent and LangChain compatibility.
+    """
+    return prompt_loader.load_prompt(prompt_name, **variables)

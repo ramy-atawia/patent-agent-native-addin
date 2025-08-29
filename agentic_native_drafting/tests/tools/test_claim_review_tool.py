@@ -1,19 +1,19 @@
 """
-Unit tests for ClaimReviewTool.
+Unit tests for ContentReviewTool.
 """
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from src.tools.claim_review_tool import ClaimReviewTool
+from src.tools.claim_review_tool import ContentReviewTool
 
 
-class TestClaimReviewTool:
-    """Test suite for ClaimReviewTool."""
+class TestContentReviewTool:
+    """Test suite for ContentReviewTool."""
     
     @pytest.fixture
     def tool(self):
-        """Create a ClaimReviewTool instance for testing."""
-        return ClaimReviewTool()
+        """Create a ContentReviewTool instance for testing."""
+        return ContentReviewTool()
     
     @pytest.fixture
     def sample_claims(self):

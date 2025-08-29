@@ -1,7 +1,9 @@
-Draft a patent claim for the following invention disclosure:
+CONTEXT: You are drafting method claims for 4G carrier aggregation technology.
 
-Disclosure: {disclosure}
-Document Content: {document_content}
-Conversation History: {conversation_history}
+PREVIOUS INVENTION: {conversation_history}
 
-Return the claim draft only.
+USER REQUEST: {disclosure}
+
+INSTRUCTIONS: Generate method claims that implement the SAME 4G carrier aggregation invention described above. Use the exact same technical components and functionality, but in method form instead of system form.
+
+DO NOT generate generic claims. Generate specific 4G carrier aggregation method claims.

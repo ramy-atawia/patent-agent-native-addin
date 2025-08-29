@@ -12,7 +12,7 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
   const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   
   return {
-    API_URL: isDevelopment ? 'http://localhost:8000' : 'https://your-production-api.com',
+    API_URL: isDevelopment ? 'http://localhost:8001' : 'https://your-production-api.com',
     NODE_ENV: isDevelopment ? 'development' : 'production',
   };
 };

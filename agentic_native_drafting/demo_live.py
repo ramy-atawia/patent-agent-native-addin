@@ -132,7 +132,7 @@ class LiveDemo:
         """Test direct tool execution"""
         print("\n🔧 Testing Direct Tool Execution...")
         request_data = {
-            "tool_name": "ClaimDraftingTool",
+            "tool_name": "ContentDraftingTool",
             "user_input": "A method for wireless communication using 5G technology",
             "context": "5G wireless implementation"
         }

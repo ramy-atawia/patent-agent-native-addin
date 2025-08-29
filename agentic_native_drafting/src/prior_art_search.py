@@ -25,7 +25,7 @@ from langfuse import observe
 try:
     from .prompt_loader import prompt_loader
 except ImportError:
-    from prompt_loader import prompt_loader
+from src.prompt_loader import prompt_loader
 
 # Load environment variables
 load_dotenv()

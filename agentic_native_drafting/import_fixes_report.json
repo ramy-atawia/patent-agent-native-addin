@@ -1,0 +1,591 @@
+{
+  "summary": {
+    "total_fixes": 97,
+    "total_errors": 0
+  },
+  "fixes_applied": [
+    {
+      "file": "fix_all_imports.py",
+      "line": 164,
+      "original": "        line = re.sub(r'ClaimDraftingTool', 'ContentDraftingTool', line)",
+      "fixed": "        line = re.sub(r'ContentDraftingTool', 'ContentDraftingTool', line)"
+    },
+    {
+      "file": "fix_all_imports.py",
+      "line": 167,
+      "original": "        line = re.sub(r'ClaimReviewTool', 'ContentReviewTool', line)",
+      "fixed": "        line = re.sub(r'ContentReviewTool', 'ContentReviewTool', line)"
+    },
+    {
+      "file": "fix_all_imports.py",
+      "line": 170,
+      "original": "        line = re.sub(r'PatentGuidanceTool', 'GeneralGuidanceTool', line)",
+      "fixed": "        line = re.sub(r'GeneralGuidanceTool', 'GeneralGuidanceTool', line)"
+    },
+    {
+      "file": "demo_live.py",
+      "line": 135,
+      "original": "            \"tool_name\": \"ClaimDraftingTool\",",
+      "fixed": "            \"tool_name\": \"ContentDraftingTool\","
+    },
+    {
+      "file": "test_llm_integration.py",
+      "line": 19,
+      "original": "        from utils.llm_client import LLMClient",
+      "fixed": "from src.utils.llm_client import LLMClient"
+    },
+    {
+      "file": "test_llm_integration.py",
+      "line": 55,
+      "original": "        from tools.general_conversation_tool import GeneralConversationTool",
+      "fixed": "from src.tools.general_conversation_tool import GeneralConversationTool"
+    },
+    {
+      "file": "test_llm_integration.py",
+      "line": 88,
+      "original": "        from tools.prior_art_search_tool import PriorArtSearchTool",
+      "fixed": "from src.tools.prior_art_search_tool import PriorArtSearchTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 18,
+      "original": "        from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 25,
+      "original": "        from agent_core.api import app",
+      "fixed": "from src.agent_core.api import app"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 32,
+      "original": "        from tools.prior_art_search_tool import PriorArtSearchTool",
+      "fixed": "from src.tools.prior_art_search_tool import PriorArtSearchTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 33,
+      "original": "        from tools.claim_drafting_tool import ContentDraftingTool",
+      "fixed": "from src.tools.claim_drafting_tool import ContentDraftingTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 34,
+      "original": "        from tools.claim_review_tool import ContentReviewTool",
+      "fixed": "from src.tools.claim_review_tool import ContentReviewTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 35,
+      "original": "        from tools.patent_guidance_tool import GeneralGuidanceTool",
+      "fixed": "from src.tools.patent_guidance_tool import GeneralGuidanceTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 36,
+      "original": "        from tools.general_conversation_tool import GeneralConversationTool",
+      "fixed": "from src.tools.general_conversation_tool import GeneralConversationTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 49,
+      "original": "        from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 59,
+      "original": "        from tools.prior_art_search_tool import PriorArtSearchTool",
+      "fixed": "from src.tools.prior_art_search_tool import PriorArtSearchTool"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 75,
+      "original": "        from agent_core.api import app",
+      "fixed": "from src.agent_core.api import app"
+    },
+    {
+      "file": "test_system_functionality.py",
+      "line": 101,
+      "original": "        from tools.claim_drafting_tool import ContentDraftingTool",
+      "fixed": "from src.tools.claim_drafting_tool import ContentDraftingTool"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 48,
+      "original": "            from utils.llm_client import LLMClient",
+      "fixed": "from src.utils.llm_client import LLMClient"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 49,
+      "original": "            from utils.enums import IntentType",
+      "fixed": "from src.utils.enums import IntentType"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 50,
+      "original": "            from utils.new_models import SearchConfig, SearchResult",
+      "fixed": "from src.utils.new_models import SearchConfig, SearchResult"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 51,
+      "original": "            from utils.patent_search_utils import EnhancedSearchAPI",
+      "fixed": "from src.utils.patent_search_utils import EnhancedSearchAPI"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 52,
+      "original": "            from utils.response_standardizer import create_thought_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 53,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 54,
+      "original": "            from tools.claim_drafting_tool import ContentDraftingTool",
+      "fixed": "from src.tools.claim_drafting_tool import ContentDraftingTool"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 55,
+      "original": "            from tools.prior_art_search_tool import PriorArtSearchTool",
+      "fixed": "from src.tools.prior_art_search_tool import PriorArtSearchTool"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 56,
+      "original": "            from tools.general_conversation_tool import GeneralConversationTool",
+      "fixed": "from src.tools.general_conversation_tool import GeneralConversationTool"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 77,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 160,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 183,
+      "original": "                    \"expected_tool\": \"PatentGuidanceTool\",",
+      "fixed": "                    \"expected_tool\": \"GeneralGuidanceTool\","
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 250,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 319,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_e2e_simple.py",
+      "line": 401,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_claims_in_report.py",
+      "line": 16,
+      "original": "from prior_art_search import SimplifiedPatentSearchEngine",
+      "fixed": "from src.prior_art_search import SimplifiedPatentSearchEngine"
+    },
+    {
+      "file": "tests/test_updated_prior_art.py",
+      "line": 16,
+      "original": "from prior_art_search import SimplifiedPatentSearchEngine",
+      "fixed": "from src.prior_art_search import SimplifiedPatentSearchEngine"
+    },
+    {
+      "file": "tests/test_prompts.py",
+      "line": 13,
+      "original": "from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "tests/test_simplified.py",
+      "line": 14,
+      "original": "from prior_art_search import SimplifiedPatentSearchEngine",
+      "fixed": "from src.prior_art_search import SimplifiedPatentSearchEngine"
+    },
+    {
+      "file": "tests/test_optimized_report.py",
+      "line": 15,
+      "original": "from prior_art_search import PatentSearchConfig, PatentSearchEngine",
+      "fixed": "from src.prior_art_search import PatentSearchConfig, PatentSearchEngine"
+    },
+    {
+      "file": "tests/test_streaming_thoughts.py",
+      "line": 146,
+      "original": "            from agent_core.orchestrator import AgentOrchestrator",
+      "fixed": "from src.agent_core.orchestrator import AgentOrchestrator"
+    },
+    {
+      "file": "tests/test_claims_retrieval.py",
+      "line": 17,
+      "original": "from prior_art_search import EnhancedPatentsViewAPI, PatentSearchConfig, PatentClaim",
+      "fixed": "from src.prior_art_search import EnhancedPatentsViewAPI, PatentSearchConfig, PatentClaim"
+    },
+    {
+      "file": "tests/test_llm_only.py",
+      "line": 23,
+      "original": "        from utils.llm_client import llm_client, send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import llm_client, send_llm_request_streaming"
+    },
+    {
+      "file": "tests/test_llm_claims_analysis.py",
+      "line": 15,
+      "original": "from prior_art_search import PatentSearchConfig, SimplifiedReportGenerator",
+      "fixed": "from src.prior_art_search import PatentSearchConfig, SimplifiedReportGenerator"
+    },
+    {
+      "file": "tests/test_llm_claims_analysis.py",
+      "line": 16,
+      "original": "from models import PatentClaim",
+      "fixed": "from src.models import PatentClaim"
+    },
+    {
+      "file": "tests/tools/test_claim_review_tool.py",
+      "line": 2,
+      "original": "Unit tests for ClaimReviewTool.",
+      "fixed": "Unit tests for ContentReviewTool."
+    },
+    {
+      "file": "tests/tools/test_claim_review_tool.py",
+      "line": 7,
+      "original": "from src.tools.claim_review_tool import ClaimReviewTool",
+      "fixed": "from src.tools.claim_review_tool import ContentReviewTool"
+    },
+    {
+      "file": "tests/tools/test_claim_review_tool.py",
+      "line": 10,
+      "original": "class TestClaimReviewTool:",
+      "fixed": "class TestContentReviewTool:"
+    },
+    {
+      "file": "tests/tools/test_claim_review_tool.py",
+      "line": 11,
+      "original": "    \"\"\"Test suite for ClaimReviewTool.\"\"\"",
+      "fixed": "    \"\"\"Test suite for ContentReviewTool.\"\"\""
+    },
+    {
+      "file": "tests/tools/test_claim_review_tool.py",
+      "line": 15,
+      "original": "        \"\"\"Create a ClaimReviewTool instance for testing.\"\"\"",
+      "fixed": "        \"\"\"Create a ContentReviewTool instance for testing.\"\"\""
+    },
+    {
+      "file": "tests/tools/test_claim_review_tool.py",
+      "line": 16,
+      "original": "        return ClaimReviewTool()",
+      "fixed": "        return ContentReviewTool()"
+    },
+    {
+      "file": "tests/chains/test_patent_drafting_chain.py",
+      "line": 65,
+      "original": "    @patch('src.chains.patent_drafting_chain.ClaimReviewTool')",
+      "fixed": "    @patch('src.chains.patent_drafting_chain.ContentReviewTool')"
+    },
+    {
+      "file": "tests/chains/test_patent_drafting_chain.py",
+      "line": 101,
+      "original": "    @patch('src.chains.patent_drafting_chain.ClaimReviewTool')",
+      "fixed": "    @patch('src.chains.patent_drafting_chain.ContentReviewTool')"
+    },
+    {
+      "file": "tests/chains/test_patent_drafting_chain.py",
+      "line": 131,
+      "original": "    @patch('src.chains.patent_drafting_chain.ClaimReviewTool')",
+      "fixed": "    @patch('src.chains.patent_drafting_chain.ContentReviewTool')"
+    },
+    {
+      "file": "tests/chains/test_patent_drafting_chain.py",
+      "line": 172,
+      "original": "    @patch('src.chains.patent_drafting_chain.ClaimReviewTool')",
+      "fixed": "    @patch('src.chains.patent_drafting_chain.ContentReviewTool')"
+    },
+    {
+      "file": "tests/chains/test_patent_drafting_chain.py",
+      "line": 216,
+      "original": "    @patch('src.chains.patent_drafting_chain.ClaimReviewTool')",
+      "fixed": "    @patch('src.chains.patent_drafting_chain.ContentReviewTool')"
+    },
+    {
+      "file": "tests/chains/test_patent_drafting_chain.py",
+      "line": 263,
+      "original": "    @patch('src.chains.patent_drafting_chain.ClaimReviewTool')",
+      "fixed": "    @patch('src.chains.patent_drafting_chain.ContentReviewTool')"
+    },
+    {
+      "file": "src/prior_art_search.py",
+      "line": 28,
+      "original": "    from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/claim_review_tool.py",
+      "line": 1,
+      "original": "from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/claim_review_tool.py",
+      "line": 2,
+      "original": "from utils.response_standardizer import create_thought_event, create_results_event, create_error_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event"
+    },
+    {
+      "file": "src/tools/prior_art_search_tool.py",
+      "line": 2,
+      "original": "    from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/prior_art_search_tool.py",
+      "line": 3,
+      "original": "    from utils.response_standardizer import create_thought_event, create_results_event, create_error_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event"
+    },
+    {
+      "file": "src/tools/prior_art_search_tool.py",
+      "line": 23,
+      "original": "    from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/general_conversation_tool.py",
+      "line": 2,
+      "original": "    from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/general_conversation_tool.py",
+      "line": 3,
+      "original": "    from utils.response_standardizer import create_thought_event, create_results_event, create_error_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event"
+    },
+    {
+      "file": "src/tools/general_conversation_tool.py",
+      "line": 109,
+      "original": "            from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/general_conversation_tool.py",
+      "line": 110,
+      "original": "            from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/claims_tools.py",
+      "line": 1,
+      "original": "from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/claims_tools.py",
+      "line": 12,
+      "original": "        from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/claims_tools.py",
+      "line": 14,
+      "original": "        from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/patent_guidance_tool.py",
+      "line": 2,
+      "original": "    from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/patent_guidance_tool.py",
+      "line": 3,
+      "original": "    from utils.response_standardizer import create_thought_event, create_results_event, create_error_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event"
+    },
+    {
+      "file": "src/tools/patent_guidance_tool.py",
+      "line": 109,
+      "original": "            from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/patent_guidance_tool.py",
+      "line": 110,
+      "original": "            from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/intent_tools.py",
+      "line": 1,
+      "original": "from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 1,
+      "original": "from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 2,
+      "original": "from utils.response_standardizer import create_thought_event, create_results_event, create_error_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 179,
+      "original": "                    from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 181,
+      "original": "                    from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 281,
+      "original": "                from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 282,
+      "original": "                from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 284,
+      "original": "                from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/claim_drafting_tool.py",
+      "line": 285,
+      "original": "                from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/tools/disclosure_tools.py",
+      "line": 1,
+      "original": "from interfaces import Tool",
+      "fixed": "from src.interfaces import Tool"
+    },
+    {
+      "file": "src/tools/disclosure_tools.py",
+      "line": 9,
+      "original": "        from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/tools/disclosure_tools.py",
+      "line": 10,
+      "original": "        from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 12,
+      "original": "from tools.claim_drafting_tool import ContentDraftingTool",
+      "fixed": "from src.tools.claim_drafting_tool import ContentDraftingTool"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 13,
+      "original": "from tools.claim_review_tool import ContentReviewTool",
+      "fixed": "from src.tools.claim_review_tool import ContentReviewTool"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 14,
+      "original": "from tools.patent_guidance_tool import GeneralGuidanceTool",
+      "fixed": "from src.tools.patent_guidance_tool import GeneralGuidanceTool"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 15,
+      "original": "from tools.prior_art_search_tool import PriorArtSearchTool",
+      "fixed": "from src.tools.prior_art_search_tool import PriorArtSearchTool"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 16,
+      "original": "from tools.general_conversation_tool import GeneralConversationTool",
+      "fixed": "from src.tools.general_conversation_tool import GeneralConversationTool"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 19,
+      "original": "from utils.enums import IntentType",
+      "fixed": "from src.utils.enums import IntentType"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 22,
+      "original": "from utils.response_standardizer import create_thought_event, create_results_event, create_error_event",
+      "fixed": "from src.utils.response_standardizer import create_thought_event, create_results_event, create_error_event"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 208,
+      "original": "            from utils.llm_client import send_llm_request_streaming",
+      "fixed": "from src.utils.llm_client import send_llm_request_streaming"
+    },
+    {
+      "file": "src/agent_core/orchestrator.py",
+      "line": 209,
+      "original": "            from prompt_loader import prompt_loader",
+      "fixed": "from src.prompt_loader import prompt_loader"
+    },
+    {
+      "file": "src/chains/patent_drafting_chain.py",
+      "line": 1,
+      "original": "from interfaces import Chain",
+      "fixed": "from src.interfaces import Chain"
+    },
+    {
+      "file": "src/chains/patent_drafting_chain.py",
+      "line": 2,
+      "original": "from tools.disclosure_tools import DisclosureAssessmentTool",
+      "fixed": "from src.tools.disclosure_tools import DisclosureAssessmentTool"
+    },
+    {
+      "file": "src/chains/patent_drafting_chain.py",
+      "line": 3,
+      "original": "from tools.claim_drafting_tool import ContentDraftingTool",
+      "fixed": "from src.tools.claim_drafting_tool import ContentDraftingTool"
+    },
+    {
+      "file": "src/chains/patent_drafting_chain.py",
+      "line": 4,
+      "original": "from tools.claim_review_tool import ContentReviewTool",
+      "fixed": "from src.tools.claim_review_tool import ContentReviewTool"
+    }
+  ],
+  "errors": []
+}

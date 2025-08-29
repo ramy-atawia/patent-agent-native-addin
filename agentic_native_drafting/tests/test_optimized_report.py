@@ -4,6 +4,7 @@ Test optimized report generation with timeout fixes and payload reduction
 """
 
 import asyncio
+import pytest
 import sys
 import os
 from pathlib import Path
@@ -11,8 +12,9 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from prior_art_search import PatentSearchConfig, PatentSearchEngine
+from src.prior_art_search import PatentSearchConfig, PatentSearchEngine
 
+@pytest.mark.asyncio
 async def test_optimized_report():
     """Test the optimized report generation with real patents from logs"""
     print("🧪 Testing Optimized Prior Art Search Report Generation")

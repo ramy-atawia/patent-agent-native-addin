@@ -7,80 +7,80 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-class ClaimReviewTool(Tool):
+class ContentReviewTool(Tool):
     """
-    Comprehensive patent claim review and analysis tool.
+    Comprehensive content review and analysis tool.
     
     This tool provides:
-    - Claim validity assessment
-    - Prior art conflict detection
-    - Claim improvement recommendations
-    - Patentability analysis
-    - Claim scope optimization
+    - Content validity assessment
+    - Prior content conflict detection
+    - Content improvement recommendations
+    - Quality analysis
+    - Content scope optimization
     """
     
     def __init__(self):
-        self.max_claims_per_review = 50
-        self.claim_quality_thresholds = {
+        self.max_content_items_per_review = 50
+        self.content_quality_thresholds = {
             "min_words": 5,
             "max_words": 200,
             "min_technical_terms": 2,
             "max_dependent_depth": 5
         }
         
-    async def run(self, claims: List[Dict], prior_art_context: str = "", invention_disclosure: str = "", **kwargs) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run(self, content_items: List[Dict], prior_content_context: str = "", original_content: str = "", **kwargs) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Review and analyze patent claims comprehensively.
+        Review and analyze content items comprehensively.
         
         Args:
-            claims: List of claim dictionaries to review
-            prior_art_context: Known prior art information
-            invention_disclosure: The original invention disclosure
+            content_items: List of content dictionaries to review
+            prior_content_context: Known prior content information
+            original_content: The original content disclosure
             **kwargs: Additional parameters including:
                 - review_type: Type of review ("basic", "comprehensive", "expert")
                 - focus_areas: Specific areas to focus on
-                - patent_office: Target patent office for compliance
+                - content_standards: Target content standards for compliance
         
         Yields:
             Streaming events in standardized format
         """
         try:
             # Validate inputs
-            self._validate_inputs(claims)
+            self._validate_inputs(content_items)
             
-            if len(claims) > self.max_claims_per_review:
-                logger.warning(f"Claims list exceeds maximum ({len(claims)} > {self.max_claims_per_review}). Truncating.")
-                claims = claims[:self.max_claims_per_review]
+            if len(content_items) > self.max_content_items_per_review:
+                logger.warning(f"Content items list exceeds maximum ({len(content_items)} > {self.max_content_items_per_review}). Truncating.")
+                content_items = content_items[:self.max_content_items_per_review]
             
             # Extract parameters
             review_type = kwargs.get('review_type', 'comprehensive')
             focus_areas = kwargs.get('focus_areas', [])
-            patent_office = kwargs.get('patent_office', 'USPTO')
+            content_standards = kwargs.get('content_standards', 'General')
             
-            logger.info(f"Starting claim review for {len(claims)} claims. Review type: {review_type}")
+            logger.info(f"Starting content review for {len(content_items)} items. Review type: {review_type}")
             
             # Yield progress event
             yield create_thought_event(
-                content=f"Starting comprehensive claim review for {len(claims)} claims",
+                content=f"Starting comprehensive content review for {len(content_items)} items",
                 thought_type="initialization",
-                metadata={"total_claims": len(claims), "review_type": review_type}
+                metadata={"total_content_items": len(content_items), "review_type": review_type}
             )
             
-            # Perform claim analysis
+            # Perform content analysis
             yield create_thought_event(
-                content="Analyzing individual claims for quality and structure...",
+                content="Analyzing individual content items for quality and structure...",
                 thought_type="analysis"
             )
             
-            claim_analysis = await self._analyze_claims(claims, invention_disclosure)
+            content_analysis = await self._analyze_content_items(content_items, original_content)
             
-            # Assess patentability
+            # Assess quality
             yield create_thought_event(
-                content="Assessing patentability and prior art conflicts...",
-                thought_type="patentability_assessment"
+                content="Assessing quality and prior content conflicts...",
+                thought_type="quality_assessment"
             )
             
-            patentability_assessment = await self._assess_patentability(claims, prior_art_context, invention_disclosure)
+            quality_assessment = await self._assess_quality(content_items, prior_content_context, original_content)
             
             # Generate recommendations
             yield create_thought_event(
@@ -88,7 +88,7 @@ class ClaimReviewTool(Tool):
                 thought_type="recommendations"
             )
             
-            recommendations = self._generate_recommendations(claim_analysis, patentability_assessment, focus_areas)
+            recommendations = self._generate_recommendations(content_analysis, quality_assessment, focus_areas)
             
             # Risk assessment
             yield create_thought_event(
@@ -96,30 +96,30 @@ class ClaimReviewTool(Tool):
                 thought_type="risk_assessment"
             )
             
-            risk_assessment = self._assess_risks(claim_analysis, patentability_assessment)
+            risk_assessment = self._assess_risks(content_analysis, quality_assessment)
             
             # Create metadata
             metadata = {
-                "tool_name": "ClaimReviewTool",
+                "tool_name": "ContentReviewTool",
                 "review_type": review_type,
-                "patent_office": patent_office,
-                "total_claims_reviewed": len(claims),
+                "content_standards": content_standards,
+                "total_content_items_reviewed": len(content_items),
                 "timestamp": datetime.now().isoformat()
             }
             
             # Create data payload
             data = {
-                "claim_analysis": claim_analysis,
-                "patentability_assessment": patentability_assessment,
+                "content_analysis": content_analysis,
+                "quality_assessment": quality_assessment,
                 "recommendations": recommendations,
                 "risk_assessment": risk_assessment,
-                "claims_reviewed": claims
+                "content_items_reviewed": content_items
             }
             
             # Generate response content
-            response_content = f"Claim review completed successfully. Analyzed {len(claims)} claims with {len(recommendations.get('improvements', []))} improvement recommendations."
+            response_content = f"Content review completed successfully. Analyzed {len(content_items)} items with {len(recommendations.get('improvements', []))} improvement recommendations."
             
-            logger.info(f"Claim review completed successfully for {len(claims)} claims")
+            logger.info(f"Content review completed successfully for {len(content_items)} items")
             
             # Yield final results event
             yield create_results_event(
@@ -129,58 +129,58 @@ class ClaimReviewTool(Tool):
             )
             
         except Exception as e:
-            logger.error(f"Claim review failed: {e}")
+            logger.error(f"Content review failed: {e}")
             yield create_error_event(
                 error=str(e),
-                context="claim_review_error",
-                metadata={"total_claims": len(claims) if claims else 0}
+                context="content_review_error",
+                metadata={"total_content_items": len(content_items) if content_items else 0}
             )
     
-    def _validate_inputs(self, claims: List[Dict]) -> None:
-        """Validate input parameters for claim review"""
-        if not claims:
-            raise ValueError("Claims list cannot be empty")
+    def _validate_inputs(self, content_items: List[Dict]) -> None:
+        """Validate input parameters for content review"""
+        if not content_items:
+            raise ValueError("Content items list cannot be empty")
         
-        if not isinstance(claims, list):
-            raise ValueError("Claims must be a list")
+        if not isinstance(content_items, list):
+            raise ValueError("Content items must be a list")
         
-        if len(claims) > self.max_claims_per_review:
-            raise ValueError(f"Claims list exceeds maximum allowed ({self.max_claims_per_review})")
+        if len(content_items) > self.max_content_items_per_review:
+            raise ValueError(f"Content items list exceeds maximum allowed ({self.max_content_items_per_review})")
     
-    async def _analyze_claims(self, claims: List[Dict], invention_disclosure: str) -> Dict[str, Any]:
-        """Analyze individual claims for quality and structure"""
+    async def _analyze_content_items(self, content_items: List[Dict], original_content: str) -> Dict[str, Any]:
+        """Analyze individual content items for quality and structure"""
         analysis = {
-            "total_claims": len(claims),
-            "independent_claims": [],
-            "dependent_claims": [],
-            "claim_quality_scores": [],
+            "total_content_items": len(content_items),
+            "independent_items": [],
+            "dependent_items": [],
+            "content_quality_scores": [],
             "structural_issues": [],
             "technical_coverage": {},
-            "claim_dependencies": {}
+            "content_dependencies": {}
         }
         
-        for i, claim in enumerate(claims):
+        for i, content_item in enumerate(content_items):
             try:
                 # Extract technical terms
-                technical_terms = self._extract_technical_terms(claim.get("claim_text", ""))
+                technical_terms = self._extract_technical_terms(content_item.get("content_text", ""))
                 
                 # Identify technical areas
-                technical_areas = self._identify_technical_areas(claim.get("claim_text", ""))
+                technical_areas = self._identify_technical_areas(content_item.get("content_text", ""))
                 
                 # Calculate quality score
-                quality_score = self._calculate_claim_quality_score(claim, technical_terms, technical_areas)
+                quality_score = self._calculate_claim_quality_score(content_item, technical_terms, technical_areas)
                 
                 # Identify issues
-                issues = self._identify_claim_issues(claim, technical_terms)
+                issues = self._identify_content_issues(content_item, technical_terms)
                 
                 # Analyze structure
-                structure = self._analyze_claim_structure(claim)
+                structure = self._analyze_content_structure(content_item)
                 
-                # Categorize claim
-                if claim.get("claim_type") == "independent":
-                    analysis["independent_claims"].append({
+                # Categorize content item
+                if content_item.get("content_type") == "independent":
+                    analysis["independent_items"].append({
                         "index": i,
-                        "claim_text": claim.get("claim_text", ""),
+                        "content_text": content_item.get("content_text", ""),
                         "technical_terms": technical_terms,
                         "technical_areas": technical_areas,
                         "quality_score": quality_score,
@@ -188,10 +188,10 @@ class ClaimReviewTool(Tool):
                         "structure": structure
                     })
                 else:
-                    analysis["dependent_claims"].append({
+                    analysis["dependent_items"].append({
                         "index": i,
-                        "claim_text": claim.get("claim_text", ""),
-                        "dependency": claim.get("dependency", ""),
+                        "content_text": content_item.get("content_text", ""),
+                        "dependency": content_item.get("dependency", ""),
                         "technical_terms": technical_terms,
                         "technical_areas": technical_areas,
                         "quality_score": quality_score,
@@ -199,7 +199,7 @@ class ClaimReviewTool(Tool):
                         "structure": structure
                     })
                 
-                analysis["claim_quality_scores"].append(quality_score)
+                analysis["content_quality_scores"].append(quality_score)
                 
                 # Update technical coverage
                 for area in technical_areas:
@@ -208,11 +208,11 @@ class ClaimReviewTool(Tool):
                     analysis["technical_coverage"][area] += 1
                 
                 # Track dependencies
-                if claim.get("dependency"):
-                    dep = claim["dependency"]
-                    if dep not in analysis["claim_dependencies"]:
-                        analysis["claim_dependencies"][dep] = []
-                    analysis["claim_dependencies"][dep].append(i)
+                if content_item.get("dependency"):
+                    dep = content_item["dependency"]
+                    if dep not in analysis["content_dependencies"]:
+                        analysis["content_dependencies"][dep] = []
+                    analysis["content_dependencies"][dep].append(i)
                 
             except Exception as e:
                 logger.warning(f"Failed to analyze claim {i}: {e}")
@@ -220,10 +220,10 @@ class ClaimReviewTool(Tool):
                 continue
         
         # Calculate summary statistics
-        if analysis["claim_quality_scores"]:
-            analysis["average_quality_score"] = sum(analysis["claim_quality_scores"]) / len(analysis["claim_quality_scores"])
-            analysis["min_quality_score"] = min(analysis["claim_quality_scores"])
-            analysis["max_quality_score"] = max(analysis["claim_quality_scores"])
+        if analysis["content_quality_scores"]:
+            analysis["average_quality_score"] = sum(analysis["content_quality_scores"]) / len(analysis["content_quality_scores"])
+            analysis["min_quality_score"] = min(analysis["content_quality_scores"])
+            analysis["max_quality_score"] = max(analysis["content_quality_scores"])
         
         return analysis
     
@@ -320,6 +320,64 @@ class ClaimReviewTool(Tool):
         
         return issues
     
+    def _identify_content_issues(self, content_item: Dict, technical_terms: List[str]) -> List[str]:
+        """Identify potential issues with the content item"""
+        issues = []
+        
+        content_text = content_item.get("content_text", "")
+        if not content_text:
+            issues.append("Missing content text")
+            return issues
+        
+        # Check for basic content issues
+        word_count = len(content_text.split())
+        if word_count < 5:
+            issues.append("Content too brief - insufficient detail")
+        elif word_count > 200:
+            issues.append("Content too verbose - may be unclear")
+        
+        # Check for technical content
+        if len(technical_terms) < 2:
+            issues.append("Insufficient technical terminology")
+        
+        # Check for structural issues
+        if not content_text.strip().endswith('.'):
+            issues.append("Content should end with proper punctuation")
+        
+        # Check for clarity issues
+        if any(word in content_text.lower() for word in ["wherein", "thereof", "thereby"]):
+            if word_count < 15:
+                issues.append("Complex language used without sufficient context")
+        
+        return issues
+    
+    def _analyze_content_structure(self, content_item: Dict) -> Dict[str, Any]:
+        """Analyze the structural elements of the content item"""
+        content_text = content_item.get("content_text", "")
+        
+        structure = {
+            "preamble": "",
+            "clauses": [],
+            "wherein_clauses": [],
+            "dependent_elements": []
+        }
+        
+        # Simple clause analysis
+        clauses = content_text.split(',')
+        if clauses:
+            structure["preamble"] = clauses[0].strip()
+            structure["clauses"] = [clause.strip() for clause in clauses[1:] if clause.strip()]
+        
+        # Look for wherein clauses
+        wherein_clauses = [clause for clause in structure["clauses"] if "wherein" in clause.lower()]
+        structure["wherein_clauses"] = wherein_clauses
+        
+        # Look for dependent elements
+        dependent_elements = [clause for clause in structure["clauses"] if any(word in clause.lower() for word in ["further", "additional", "wherein"])]
+        structure["dependent_elements"] = dependent_elements
+        
+        return structure
+    
     def _analyze_claim_structure(self, claim: Dict) -> Dict[str, Any]:
         """Analyze the structural elements of the claim"""
         claim_text = claim.get("claim_text", "")
@@ -347,54 +405,54 @@ class ClaimReviewTool(Tool):
         
         return structure
     
-    async def _assess_patentability(self, claims: List[Dict], prior_art_context: str, invention_disclosure: str) -> Dict[str, Any]:
-        """Assess the patentability of the claims"""
+    async def _assess_quality(self, content_items: List[Dict], prior_content_context: str, original_content: str) -> Dict[str, Any]:
+        """Assess the quality of the content items"""
         assessment = {
-            "overall_patentability": "unknown",
+            "overall_quality": "unknown",
             "confidence_score": 0.5,
             "key_factors": [],
-            "prior_art_risks": [],
+            "prior_content_risks": [],
             "recommendations": []
         }
         
-        # Basic assessment based on disclosure sufficiency
-        if invention_disclosure and len(invention_disclosure.split()) > 50:
-            assessment["overall_patentability"] = "likely_patentable"
+        # Basic assessment based on content sufficiency
+        if original_content and len(original_content.split()) > 50:
+            assessment["overall_quality"] = "likely_high_quality"
             assessment["confidence_score"] = 0.7
-            assessment["key_factors"].append("Sufficient disclosure provided")
+            assessment["key_factors"].append("Sufficient content provided")
         else:
-            assessment["overall_patentability"] = "insufficient_disclosure"
+            assessment["overall_quality"] = "insufficient_content"
             assessment["confidence_score"] = 0.3
-            assessment["key_factors"].append("Insufficient disclosure for patentability assessment")
-            assessment["recommendations"].append("Provide more detailed invention description")
+            assessment["key_factors"].append("Insufficient content for quality assessment")
+            assessment["recommendations"].append("Provide more detailed content description")
         
-        # Check for prior art context
-        if prior_art_context:
-            assessment["prior_art_risks"].append("Prior art context provided - requires detailed analysis")
+        # Check for prior content context
+        if prior_content_context:
+            assessment["prior_content_risks"].append("Prior content context provided - requires detailed analysis")
             assessment["confidence_score"] = min(assessment["confidence_score"], 0.6)
         
-        # Check claim quality
-        if claims:
+        # Check content quality
+        if content_items:
             quality_scores = []
-            for claim in claims:
-                technical_terms = self._extract_technical_terms(claim.get("claim_text", ""))
-                technical_areas = self._identify_technical_areas(claim.get("claim_text", ""))
-                quality_score = self._calculate_claim_quality_score(claim, technical_terms, technical_areas)
+            for content_item in content_items:
+                technical_terms = self._extract_technical_terms(content_item.get("content_text", ""))
+                technical_areas = self._identify_technical_areas(content_item.get("content_text", ""))
+                quality_score = self._calculate_claim_quality_score(content_item, technical_terms, technical_areas)
                 quality_scores.append(quality_score)
             
             if quality_scores:
                 avg_quality = sum(quality_scores) / len(quality_scores)
                 if avg_quality > 0.7:
-                    assessment["key_factors"].append("High quality claims")
+                    assessment["key_factors"].append("High quality content")
                     assessment["confidence_score"] = min(1.0, assessment["confidence_score"] + 0.1)
                 elif avg_quality < 0.4:
-                    assessment["key_factors"].append("Low quality claims")
+                    assessment["key_factors"].append("Low quality content")
                     assessment["confidence_score"] = max(0.1, assessment["confidence_score"] - 0.2)
-                    assessment["recommendations"].append("Improve claim quality and technical content")
+                    assessment["recommendations"].append("Improve content quality and technical content")
         
         return assessment
     
-    def _generate_recommendations(self, claim_analysis: Dict, patentability_assessment: Dict, focus_areas: List[str]) -> Dict[str, Any]:
+    def _generate_recommendations(self, content_analysis: Dict, quality_assessment: Dict, focus_areas: List[str]) -> Dict[str, Any]:
         """Generate improvement recommendations based on analysis"""
         recommendations = {
             "improvements": [],
@@ -402,26 +460,26 @@ class ClaimReviewTool(Tool):
             "focus_area_suggestions": {}
         }
         
-        # Claim quality improvements
-        if claim_analysis.get("average_quality_score", 0) < 0.6:
-            recommendations["improvements"].append("Improve overall claim quality")
+        # Content quality improvements
+        if content_analysis.get("average_quality_score", 0) < 0.6:
+            recommendations["improvements"].append("Improve overall content quality")
             recommendations["priorities"].append("high")
         
-        # Independent claims
-        if len(claim_analysis.get("independent_claims", [])) == 0:
-            recommendations["improvements"].append("Add independent claims")
+        # Independent content items
+        if len(content_analysis.get("independent_items", [])) == 0:
+            recommendations["improvements"].append("Add independent content items")
             recommendations["priorities"].append("critical")
-        elif len(claim_analysis.get("independent_claims", [])) < 2:
-            recommendations["improvements"].append("Consider adding more independent claims for broader coverage")
+        elif len(content_analysis.get("independent_items", [])) < 2:
+            recommendations["improvements"].append("Consider adding more independent content items for broader coverage")
             recommendations["priorities"].append("medium")
         
-        # Dependent claims
-        if len(claim_analysis.get("dependent_claims", [])) == 0:
-            recommendations["improvements"].append("Add dependent claims for comprehensive coverage")
+        # Dependent content items
+        if len(content_analysis.get("dependent_items", [])) == 0:
+            recommendations["improvements"].append("Add dependent content items for comprehensive coverage")
             recommendations["priorities"].append("high")
         
         # Technical coverage
-        technical_coverage = claim_analysis.get("technical_coverage", {})
+        technical_coverage = content_analysis.get("technical_coverage", {})
         if len(technical_coverage) < 2:
             recommendations["improvements"].append("Expand technical coverage across multiple areas")
             recommendations["priorities"].append("medium")
@@ -429,16 +487,16 @@ class ClaimReviewTool(Tool):
         # Focus area specific recommendations
         for focus_area in focus_areas:
             if focus_area not in technical_coverage:
-                recommendations["focus_area_suggestions"][focus_area] = f"Add claims covering {focus_area} technology"
+                recommendations["focus_area_suggestions"][focus_area] = f"Add content covering {focus_area} technology"
         
-        # Patentability recommendations
-        if patentability_assessment.get("overall_patentability") == "insufficient_disclosure":
-            recommendations["improvements"].append("Enhance invention disclosure with more technical details")
+        # Quality recommendations
+        if quality_assessment.get("overall_quality") == "insufficient_content":
+            recommendations["improvements"].append("Enhance content with more technical details")
             recommendations["priorities"].append("critical")
         
         return recommendations
     
-    def _assess_risks(self, claim_analysis: Dict, patentability_assessment: Dict) -> Dict[str, Any]:
+    def _assess_risks(self, content_analysis: Dict, quality_assessment: Dict) -> Dict[str, Any]:
         """Assess potential risks and issues"""
         risks = {
             "high_risk": [],
@@ -448,24 +506,24 @@ class ClaimReviewTool(Tool):
         }
         
         # Quality risks
-        if claim_analysis.get("average_quality_score", 0) < 0.4:
-            risks["high_risk"].append("Very low claim quality may lead to rejection")
-            risks["mitigation_strategies"].append("Improve claim drafting and technical content")
+        if content_analysis.get("average_quality_score", 0) < 0.4:
+            risks["high_risk"].append("Very low content quality may lead to rejection")
+            risks["mitigation_strategies"].append("Improve content drafting and technical content")
         
         # Coverage risks
-        if len(claim_analysis.get("independent_claims", [])) == 0:
-            risks["critical_risk"] = ["No independent claims - fundamental patent issue"]
-            risks["mitigation_strategies"].append("Draft at least one strong independent claim")
+        if len(content_analysis.get("independent_items", [])) == 0:
+            risks["critical_risk"] = ["No independent content - fundamental content issue"]
+            risks["mitigation_strategies"].append("Draft at least one strong independent content item")
         
         # Technical coverage risks
-        technical_coverage = claim_analysis.get("technical_coverage", {})
+        technical_coverage = content_analysis.get("technical_coverage", {})
         if len(technical_coverage) < 2:
-            risks["medium_risk"].append("Limited technical coverage may reduce patent value")
-            risks["mitigation_strategies"].append("Expand claims to cover multiple technical aspects")
+            risks["medium_risk"].append("Limited technical coverage may reduce content value")
+            risks["mitigation_strategies"].append("Expand content to cover multiple technical aspects")
         
-        # Patentability risks
-        if patentability_assessment.get("confidence_score", 0) < 0.4:
-            risks["high_risk"].append("Low patentability confidence")
-            risks["mitigation_strategies"].append("Conduct thorough prior art search and improve disclosure")
+        # Quality risks
+        if quality_assessment.get("confidence_score", 0) < 0.4:
+            risks["high_risk"].append("Low quality confidence")
+            risks["mitigation_strategies"].append("Conduct thorough prior content search and improve disclosure")
         
         return risks

@@ -1,0 +1,146 @@
+{
+  "test_summary": {
+    "total_steps": 7,
+    "success_rate": 100.0,
+    "avg_context_score": 57.142857142857146,
+    "avg_execution_time": 8.67805484363011,
+    "context_utilization": 57.14285714285714
+  },
+  "detailed_results": [
+    {
+      "step_name": "Initial Greeting",
+      "user_input": "Hello, I'm working on a patent for 6G carrier aggregation technology",
+      "execution_time": 3.3664231300354004,
+      "events_count": 7,
+      "context_analysis": {
+        "conversation_history_used": true,
+        "document_content_used": false,
+        "context_awareness": 1,
+        "overall_score": 50.0
+      },
+      "success": true
+    },
+    {
+      "step_name": "Document Analysis",
+      "user_input": "Analyze this patent disclosure and identify key technical concepts",
+      "execution_time": 8.669681072235107,
+      "events_count": 7,
+      "context_analysis": {
+        "conversation_history_used": true,
+        "document_content_used": false,
+        "context_awareness": 1,
+        "overall_score": 50.0
+      },
+      "success": true
+    },
+    {
+      "step_name": "Prior Art Search",
+      "user_input": "Find prior art patents related to AI-powered carrier aggregation in wireless networks",
+      "execution_time": 9.966431856155396,
+      "events_count": 8,
+      "context_analysis": {
+        "conversation_history_used": false,
+        "document_content_used": false,
+        "context_awareness": 0,
+        "overall_score": 0.0
+      },
+      "success": true
+    },
+    {
+      "step_name": "Content Drafting",
+      "user_input": "Draft improved patent claims that address the gaps identified in prior art",
+      "execution_time": 11.037705898284912,
+      "events_count": 10,
+      "context_analysis": {
+        "conversation_history_used": false,
+        "document_content_used": true,
+        "context_awareness": 1,
+        "overall_score": 50.0
+      },
+      "success": true
+    },
+    {
+      "step_name": "Follow-up Context Usage",
+      "user_input": "Can you refine the first claim to be more specific about the AI algorithm?",
+      "execution_time": 10.668256998062134,
+      "events_count": 10,
+      "context_analysis": {
+        "conversation_history_used": false,
+        "document_content_used": true,
+        "context_awareness": 1,
+        "overall_score": 50.0
+      },
+      "success": true
+    },
+    {
+      "step_name": "Document Context Usage",
+      "user_input": "How does this compare to existing 5G carrier aggregation approaches?",
+      "execution_time": 10.103259086608887,
+      "events_count": 7,
+      "context_analysis": {
+        "conversation_history_used": true,
+        "document_content_used": true,
+        "context_awareness": 2,
+        "overall_score": 100.0
+      },
+      "success": true
+    },
+    {
+      "step_name": "Multi-Context Integration",
+      "user_input": "Based on our conversation and the document content, what are the most innovative aspects of this invention?",
+      "execution_time": 6.934625864028931,
+      "events_count": 7,
+      "context_analysis": {
+        "conversation_history_used": true,
+        "document_content_used": true,
+        "context_awareness": 2,
+        "overall_score": 100.0
+      },
+      "success": true
+    }
+  ],
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "Hello, I'm working on a patent for 6G carrier aggregation technology",
+      "timestamp": "2025-08-27T21:00:38.885705"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! I can help you with patent work for 6G carrier aggregation technology. What would you like to do first?",
+      "timestamp": "2025-08-27T21:00:38.885719"
+    },
+    {
+      "role": "user",
+      "content": "I need to search for prior art related to AI in carrier aggregation",
+      "timestamp": "2025-08-27T21:00:50.922043"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll help you search for prior art related to AI in carrier aggregation. Let me search the patent databases.",
+      "timestamp": "2025-08-27T21:00:50.922047"
+    },
+    {
+      "role": "user",
+      "content": "Based on the prior art search, draft improved patent claims",
+      "timestamp": "2025-08-27T21:01:00.888573"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll draft improved patent claims based on the prior art analysis and your disclosure.",
+      "timestamp": "2025-08-27T21:01:00.888577"
+    }
+  ],
+  "document_content": {
+    "text": "\n    Patent Disclosure: 6G Carrier Aggregation System\n    \n    This invention relates to a novel approach for carrier aggregation in 6G wireless networks. \n    The system utilizes artificial intelligence to dynamically allocate and manage multiple \n    carrier frequencies for optimal network performance.\n    \n    Key Features:\n    1. AI-powered carrier selection algorithm\n    2. Dynamic frequency allocation based on network conditions\n    3. Real-time optimization of carrier combinations\n    4. Intelligent load balancing across multiple carriers\n    5. Adaptive modulation and coding schemes\n    ",
+    "paragraphs": [
+      "6G carrier aggregation overview",
+      "AI-powered carrier selection",
+      "Dynamic frequency allocation",
+      "Real-time optimization",
+      "Load balancing and modulation"
+    ],
+    "session_id": "realistic_test_1756342838"
+  },
+  "timestamp": "2025-08-27T21:01:39.633221"
+}
