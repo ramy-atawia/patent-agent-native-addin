@@ -31,23 +31,6 @@ class SearchResult:
     reasoning: str = ""
 
 @dataclass
-class ContentItem:
-    """Generic content item structure"""
-    item_number: int
-    item_text: str
-    item_type: str = "primary"  # primary, secondary
-    dependencies: List[int] = field(default_factory=list)
-
-@dataclass
-class SimpleAnalysis:
-    """Generic analysis result"""
-    item_id: str
-    relevance_score: float
-    key_concepts: List[str] = field(default_factory=list)
-    categories: List[str] = field(default_factory=list)
-    summary: str = ""
-
-@dataclass
 class SearchQuery:
     """Generic search query structure"""
     query_text: str
