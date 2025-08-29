@@ -9,6 +9,12 @@ import InsertButton from './InsertButton';
 import { LoginForm } from './LoginForm';
 import './ChatBot.css';
 
+// Utility function for consistent display name logic
+const getDisplayName = (user: any): string | null => {
+  if (!user) return null;
+  return user.name || user.nickname || null;
+};
+
 export const ChatBot: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const { messages, addMessage, getConversationHistory, sessionId, updateSessionId, clearConversation } = useConversation();
@@ -17,14 +23,12 @@ export const ChatBot: React.FC = () => {
   const [streamingResponse, setStreamingResponse] = useState('');
   const [streamingThoughts, setStreamingThoughts] = useState<string[]>([]);
   const [streamingAnalysis, setStreamingAnalysis] = useState('');
-  const [isStreamingThoughtsExpanded, setIsStreamingThoughtsExpanded] = useState(false);
+  const [isStreamingThoughtsExpanded, setIsStreamingThoughtsExpanded] = useState(false); // Start collapsed
+  const [wasThoughtsManuallyExpanded, setWasThoughtsManuallyExpanded] = useState(false); // Track user preference
   
-  // Fixed: Single ref for current streaming state
-  const streamingStateRef = useRef({
-    thoughts: [] as string[],
-    analysis: '',
-    response: ''
-  });
+  // Simple ref to hold current streaming state for completion callback
+  const currentThoughtsRef = useRef<string[]>([]);
+  const currentAnalysisRef = useRef<string>('');
   
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -34,19 +38,11 @@ export const ChatBot: React.FC = () => {
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [showUndoToast, setShowUndoToast] = useState(false);
-  const undoTimerRef = useRef<number | null>(null);
+  const undoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const backupRef = useRef<{ messages: ChatMessage[]; sessionId: string | null } | null>(null);
-  const displayName = (user && (user.name || user.nickname)) ? (user.name || user.nickname) : null;
 
-  // Fixed: Sync all streaming states with ref
-  useEffect(() => {
-    streamingStateRef.current = {
-      thoughts: streamingThoughts,
-      analysis: streamingAnalysis,
-      response: streamingResponse
-    };
-  }, [streamingThoughts, streamingAnalysis, streamingResponse]);
-  
+  const displayName = getDisplayName(user);
+
   // close profile menu on outside click or Escape
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -84,13 +80,21 @@ export const ChatBot: React.FC = () => {
     setStreamingResponse('');
     setStreamingThoughts([]);
     setStreamingAnalysis('');
-    streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
+    currentThoughtsRef.current = [];
+    currentAnalysisRef.current = '';
     setIsLoading(false);
+    // Don't reset thoughts expansion state on cleanup
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingResponse, streamingThoughts, streamingAnalysis]);
+
+  // Handler for streaming thoughts toggle
+  const handleStreamingThoughtsToggle = () => {
+    setIsStreamingThoughtsExpanded(!isStreamingThoughtsExpanded);
+    setWasThoughtsManuallyExpanded(true); // Remember user interacted
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,12 +114,20 @@ export const ChatBot: React.FC = () => {
     setStreamingResponse('');
     setStreamingThoughts([]);
     setStreamingAnalysis('');
-    streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
+    currentThoughtsRef.current = [];
+    currentAnalysisRef.current = '';
+    // Reset user interaction tracking for new request
+    setWasThoughtsManuallyExpanded(false);
+    setIsStreamingThoughtsExpanded(false); // Start collapsed
 
     try {
-      // Abort any previous in-flight request
+      // Abort any previous in-flight request safely
       if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        try {
+          abortControllerRef.current.abort();
+        } catch (e) {
+          console.warn('Failed to abort previous request:', e);
+        }
         abortControllerRef.current = null;
       }
       abortControllerRef.current = new AbortController();
@@ -158,83 +170,107 @@ export const ChatBot: React.FC = () => {
             timestamp: new Date().toISOString()
           });
           
-          // Simplified: Just two types - thoughts and results!
-          const isThoughtEvent = eventType === 'thoughts';
-          const isFinalResult = eventType === 'results';
-          const isErrorEvent = eventType === 'error' || eventType === 'low_confidence';
-          
-          if (isThoughtEvent) {
-            // Add all thoughts to the thoughts array - simple accumulation
-            setStreamingThoughts(prev => {
-              const newThoughts = [...prev, chunk];
-              streamingStateRef.current.thoughts = newThoughts;
-              return newThoughts;
-            });
-            // Clear any existing response when new thoughts come in
-            if (streamingResponse) {
-              setStreamingResponse('');
-              streamingStateRef.current.response = '';
-            }
-          } else if (isFinalResult) {
-            // Set final response
-            setStreamingResponse(chunk);
-            streamingStateRef.current.response = chunk;
-          } else if (isErrorEvent) {
-            // Add error to thoughts
-            setStreamingThoughts(prev => {
-              const errorMsg = `❌ ${chunk}`;
-              const newThoughts = [...prev, errorMsg];
-              streamingStateRef.current.thoughts = newThoughts;
-              return newThoughts;
-            });
-          } else {
-            // Unknown event - add to thoughts with prefix
-            const prefixedChunk = eventType ? `[${eventType}] ${chunk}` : chunk;
-            setStreamingThoughts(prev => {
-              const newThoughts = [...prev, prefixedChunk];
-              streamingStateRef.current.thoughts = newThoughts;
-              return newThoughts;
-            });
+          // Clean event handling with switch statement
+          switch (eventType) {
+            case 'thoughts':
+              console.log('📝 Adding thought:', chunk);
+              setStreamingThoughts(prev => {
+                const newThoughts = [...prev, chunk];
+                currentThoughtsRef.current = newThoughts; // Keep ref in sync
+                return newThoughts;
+              });
+              // Clear any existing response when new thoughts come in
+              if (streamingResponse) {
+                setStreamingResponse('');
+              }
+              break;
+              
+            case 'results':
+              console.log('🎯 Setting final response:', chunk.substring(0, 100));
+              setStreamingResponse(chunk);
+              break;
+              
+            case 'analysis':
+              console.log('🔍 Adding analysis:', chunk.substring(0, 100));
+              setStreamingAnalysis(chunk);
+              currentAnalysisRef.current = chunk; // Keep ref in sync
+              break;
+              
+            case 'error':
+            case 'low_confidence':
+              setStreamingThoughts(prev => {
+                const newThoughts = [...prev, `❌ ${chunk}`];
+                currentThoughtsRef.current = newThoughts; // Keep ref in sync
+                return newThoughts;
+              });
+              break;
+              
+            default:
+              // Unknown event - add to thoughts with prefix
+              const prefixedChunk = eventType ? `[${eventType}] ${chunk}` : chunk;
+              setStreamingThoughts(prev => {
+                const newThoughts = [...prev, prefixedChunk];
+                currentThoughtsRef.current = newThoughts; // Keep ref in sync
+                return newThoughts;
+              });
+              break;
           }
         },
         (response) => {
-          // Fixed: Use current ref state for final message
-          const currentState = streamingStateRef.current;
+          console.log('🎯 COMPLETION CALLBACK - Creating final message');
           
-          console.log('Creating final message with state:', {
-            thoughtsCount: currentState.thoughts.length,
-            hasAnalysis: !!currentState.analysis,
-            hasResponse: !!currentState.response
-          });
-          
-          // Combine all thoughts
-          const allThoughts = [...currentState.thoughts];
-          if (currentState.analysis) {
-            allThoughts.push(`🔍 Analysis: ${currentState.analysis}`);
+          // Use refs to get current streaming state (not closure state)
+          const finalThoughts = [...currentThoughtsRef.current];
+          if (currentAnalysisRef.current) {
+            finalThoughts.push(`🔍 Analysis: ${currentAnalysisRef.current}`);
           }
           
+          console.log('🎯 Using thoughts from ref:', {
+            thoughtsCount: currentThoughtsRef.current.length,
+            analysis: currentAnalysisRef.current ? 'present' : 'none',
+            finalThoughtsCount: finalThoughts.length
+          });
+          
           // Clean up thoughts - remove empty ones
-          const cleanedThoughts = allThoughts.filter(thought => thought.trim());
+          const cleanedThoughts = finalThoughts.filter(thought => thought.trim());
+          
+          // Use the response content directly - it's already properly formatted by the tool
+          let messageContent = response.response;
+          
+          // Only add claims if they're not already in the response content
+          if (response.data?.claims && response.data.claims.length > 0 && !messageContent.includes('Generated Patent Claims')) {
+            messageContent += '\n\n**Generated Patent Claims:**\n';
+            response.data.claims.forEach((claim: any, index: number) => {
+              messageContent += `\n**Claim ${claim.content_number || index + 1}** (${claim.content_type || 'primary'}):\n`;
+              messageContent += `${claim.content_text}\n`;
+            });
+          }
           
           const assistantMessage: ChatMessage = {
             role: 'assistant',
-            content: response.response,
+            content: messageContent,
             timestamp: new Date().toISOString(),
             thoughts: cleanedThoughts.length > 0 ? cleanedThoughts : undefined,
+            // Preserve user's expansion preference or default to expanded for completed messages
+            thoughtsExpanded: wasThoughtsManuallyExpanded ? isStreamingThoughtsExpanded : true
           };
           
           console.log('Final message created:', {
             contentLength: assistantMessage.content.length,
-            thoughtsCount: assistantMessage.thoughts?.length || 0
+            thoughtsCount: assistantMessage.thoughts?.length || 0,
+            thoughtsExpanded: assistantMessage.thoughtsExpanded,
+            actualThoughts: assistantMessage.thoughts
           });
           
+          console.log('🚀 ADDING MESSAGE TO CONVERSATION:', assistantMessage);
           addMessage(assistantMessage);
           
           // Clear all streaming state
           setStreamingResponse('');
           setStreamingThoughts([]);
           setStreamingAnalysis('');
-          streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
+          currentThoughtsRef.current = [];
+          currentAnalysisRef.current = '';
           
           // Update session ID if provided
           if (response.session_id) {
@@ -246,6 +282,14 @@ export const ChatBot: React.FC = () => {
           console.log('Response metadata:', response.metadata);
           if (response.data?.claims) {
             console.log('Generated claims:', response.data.claims);
+            console.log('Claims structure:', {
+              claimsType: typeof response.data.claims,
+              isArray: Array.isArray(response.data.claims),
+              length: response.data.claims.length,
+              firstClaim: response.data.claims[0]
+            });
+          } else {
+            console.log('No claims found in response.data:', response.data);
           }
         },
         (error) => {
@@ -272,7 +316,6 @@ export const ChatBot: React.FC = () => {
           setStreamingResponse('');
           setStreamingThoughts([]);
           setStreamingAnalysis('');
-          streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
         },
         abortControllerRef.current.signal
       );
@@ -290,7 +333,6 @@ export const ChatBot: React.FC = () => {
       setStreamingResponse('');
       setStreamingThoughts([]);
       setStreamingAnalysis('');
-      streamingStateRef.current = { thoughts: [], analysis: '', response: '' };
     } finally {
       if (abortControllerRef.current) {
         abortControllerRef.current = null;
@@ -308,7 +350,7 @@ export const ChatBot: React.FC = () => {
   useEffect(() => {
     return () => {
       if (undoTimerRef.current) { 
-        window.clearTimeout(undoTimerRef.current); 
+        clearTimeout(undoTimerRef.current); 
         undoTimerRef.current = null; 
       }
     };
@@ -327,28 +369,12 @@ export const ChatBot: React.FC = () => {
     }
   };
 
-  const handleClearChat = () => {
-    try {
-      backupRef.current = { messages: [...messages], sessionId };
-    } catch (e) { 
-      backupRef.current = null; 
-    }
-
-    cleanup();
+  // Simple solution: just clear conversation when needed
+  const handleClearConversation = () => {
     clearConversation();
-    setError(null);
-    setRetryCount(0);
-
-    setShowUndoToast(true);
-    if (undoTimerRef.current) { 
-      window.clearTimeout(undoTimerRef.current); 
-      undoTimerRef.current = null; 
-    }
-    undoTimerRef.current = window.setTimeout(() => {
-      backupRef.current = null;
-      setShowUndoToast(false);
-      undoTimerRef.current = null;
-    }, 5000) as unknown as number;
+    setStreamingResponse('');
+    setStreamingThoughts([]);
+    setStreamingAnalysis('');
   };
 
   const handleUndoClear = () => {
@@ -363,7 +389,7 @@ export const ChatBot: React.FC = () => {
       backupRef.current = null;
     }
     if (undoTimerRef.current) { 
-      window.clearTimeout(undoTimerRef.current); 
+      clearTimeout(undoTimerRef.current); 
       undoTimerRef.current = null; 
     }
     setShowUndoToast(false);
@@ -403,7 +429,7 @@ export const ChatBot: React.FC = () => {
         </div>
         
         <div className="header-center">
-          <h3>{`Welcome${user && (user.name || user.nickname) ? ', ' + (user.name || user.nickname) : ''}`}</h3>
+          <h3>{`Welcome${getDisplayName(user) ? ', ' + getDisplayName(user) : ''}`}</h3>
         </div>
         
         <div className="header-buttons">
@@ -424,7 +450,7 @@ export const ChatBot: React.FC = () => {
 
             {profileMenuOpen && (
               <div className="profile-menu" role="menu" aria-label="Profile menu">
-                <button role="menuitem" className="profile-menu-item" onClick={() => { setProfileMenuOpen(false); handleClearChat(); }}>
+                <button role="menuitem" className="profile-menu-item" onClick={() => { setProfileMenuOpen(false); handleClearConversation(); }}>
                   Clear conversation
                 </button>
                 <button role="menuitem" className="profile-menu-item" aria-disabled="true" disabled>
@@ -480,16 +506,16 @@ export const ChatBot: React.FC = () => {
           />
         ))}
         
-        {/* Fixed: Show streaming content when available */}
+        {/* Streaming content with proper state management */}
         {(streamingThoughts.length > 0 || streamingAnalysis || streamingResponse || isLoading) && (
           <div className="message assistant">
             <div className="message-content streaming-message">
               {/* Show streaming thoughts during processing */}
               {(streamingThoughts.length > 0 || isLoading) && (
-                <div className={`thoughts-section ${isLoading ? 'streaming' : ''} ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}>
+                <div className={`thoughts-section streaming ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}>
                   <div 
-                    className={`thoughts-toggle ${isLoading ? 'streaming' : ''} ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}
-                    onClick={() => setIsStreamingThoughtsExpanded(!isStreamingThoughtsExpanded)}
+                    className={`thoughts-toggle streaming ${isStreamingThoughtsExpanded ? 'expanded' : ''}`}
+                    onClick={handleStreamingThoughtsToggle}
                     style={{ cursor: 'pointer' }}
                   >
                     <span className="thoughts-icon" style={{
@@ -543,25 +569,23 @@ export const ChatBot: React.FC = () => {
                     )}
                     
                     {/* Show other thoughts as individual items */}
-                    <div className="thoughts-flowing">
-                      {streamingThoughts.map((thought, index) => (
-                        <div key={index} className="thought-item new-thought">
-                          {thought.trim()}
+                    {streamingThoughts.map((thought, index) => (
+                      <div key={index} className="thought-item new-thought">
+                        {thought.trim()}
+                      </div>
+                    ))}
+                    
+                    {/* Show thinking indicator when actively loading more thoughts */}
+                    {isLoading && streamingThoughts.length > 0 && (
+                      <div className="thoughts-thinking-indicator">
+                        <span>Thinking more</span>
+                        <div className="thoughts-thinking-dots">
+                          <span></span>
+                          <span></span>
+                          <span></span>
                         </div>
-                      ))}
-                      
-                      {/* Show thinking indicator when actively loading more thoughts */}
-                      {isLoading && streamingThoughts.length > 0 && (
-                        <div className="thoughts-thinking-indicator">
-                          <span>Thinking more</span>
-                          <div className="thoughts-thinking-dots">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -605,6 +629,25 @@ export const ChatBot: React.FC = () => {
         )}
         
         <div ref={messagesEndRef} />
+      </div>
+
+      {/* Simple context control */}
+      <div style={{ padding: '0.5rem 1.5rem', textAlign: 'center' }}>
+        <button 
+          onClick={handleClearConversation}
+          style={{
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '0.5rem 1rem',
+            fontSize: '0.9rem',
+            cursor: 'pointer'
+          }}
+          title="Clear conversation history for new invention context"
+        >
+          🧹 Clear Context for New Invention
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} className="input-form">

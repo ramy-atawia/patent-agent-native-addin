@@ -264,16 +264,41 @@ const MarkdownConverter: React.FC<MarkdownConverterProps> = ({
   useEffect(() => {
     if (onConvert && markdownRef.current) {
       // Get the HTML content after render
-      const htmlContent = markdownRef.current.innerHTML;
+      let htmlContent = markdownRef.current.innerHTML;
+      
+      // Clean up HTML for better Word compatibility
+      htmlContent = htmlContent
+        // Remove extra whitespace and newlines
+        .replace(/\s+/g, ' ')
+        .replace(/>\s+</g, '><')
+        // Ensure proper paragraph spacing
+        .replace(/<\/p>\s*<p>/g, '</p>\n<p>')
+        // Clean up header formatting
+        .replace(/<h([1-6])>\s*/g, '<h$1>')
+        .replace(/\s*<\/h([1-6])>/g, '</h$1>')
+        // Ensure strong tags are properly formatted
+        .replace(/<strong>\s*/g, '<strong>')
+        .replace(/\s*<\/strong>/g, '</strong>')
+        // Trim overall content
+        .trim();
+      
       onConvert(htmlContent);
     }
   }, [markdown, onConvert]);
 
-  // Custom components for enhanced styling (let styled-components handle the styling)
+  // Custom components for enhanced styling with proper HTML structure for Word
   const components = {
     h1: ({ children, ...props }: any) => <h1 {...props}>{children}</h1>,
     h2: ({ children, ...props }: any) => <h2 {...props}>{children}</h2>,
+    h3: ({ children, ...props }: any) => <h3 {...props}>{children}</h3>,
+    h4: ({ children, ...props }: any) => <h4 {...props}>{children}</h4>,
     table: ({ children, ...props }: any) => <table {...props}>{children}</table>,
+    
+    // Ensure paragraphs are properly wrapped for Word compatibility
+    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
+    
+    // Ensure strong/bold text is properly formatted
+    strong: ({ children, ...props }: any) => <strong {...props}>{children}</strong>,
     
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');

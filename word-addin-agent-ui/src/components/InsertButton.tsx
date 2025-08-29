@@ -17,24 +17,61 @@ const InsertButton: React.FC<InsertButtonProps> = ({ content, disabled = false, 
         await onInsert(content);
       } else if (typeof Office !== 'undefined' && typeof Word !== 'undefined') {
         await Word.run(async (context: any) => {
-          const selection = context.document.getSelection();
-          
-          if (content.includes('<') && content.includes('>')) {
-            // Use insertHtml with proper Word.InsertLocation to prevent auto-conversion
-            selection.insertHtml(content, Word.InsertLocation.replace);
+          try {
+            const selection = context.document.getSelection();
             
-            // Force context sync and then select the inserted content
-            await context.sync();
-            
-            // This prevents Word's auto-conversion back to raw HTML
-            selection.select();
-            await context.sync();
-          } else {
-            // Insert as plain text for non-HTML content
-            selection.insertText(content, 'Replace');
+            if (content.includes('<') && content.includes('>')) {
+              // Clean and format HTML content for Word
+              let formattedContent = content.trim();
+              
+              // Ensure content starts with a proper HTML tag
+              if (!formattedContent.startsWith('<')) {
+                formattedContent = `<div>${formattedContent}</div>`;
+              }
+              
+              // Use Word's insertHtml method with proper location
+              // Word.InsertLocation.replace will replace the current selection
+              selection.insertHtml(formattedContent, Word.InsertLocation.replace);
+              
+              // Sync to ensure the HTML is inserted
+              await context.sync();
+              
+              // Get the inserted range and apply formatting
+              const insertedRange = selection.getRange();
+              insertedRange.load('text,paragraphs');
+              await context.sync();
+              
+              // Apply consistent formatting to the inserted content
+              insertedRange.font.name = 'Calibri';
+              insertedRange.font.size = 11;
+              
+              // Ensure proper paragraph spacing
+              if (insertedRange.paragraphs) {
+                insertedRange.paragraphs.load('firstLineIndent,spacing');
+                await context.sync();
+                
+                // Set consistent paragraph formatting
+                insertedRange.paragraphs.firstLineIndent = 0;
+                insertedRange.paragraphs.spacing.after = 240; // 12pt spacing
+              }
+              
+              await context.sync();
+              
+            } else {
+              // Insert as plain text with formatting
+              selection.insertText(content, 'Replace');
+              
+              // Apply formatting to plain text
+              const insertedRange = selection.getRange();
+              insertedRange.font.name = 'Calibri';
+              insertedRange.font.size = 11;
+              
+              await context.sync();
+            }
+          } catch (error) {
+            console.error('Error in Word.run:', error);
+            throw error;
           }
-          
-          await context.sync();
         });
       } else {
         console.warn('Office.js not available');
